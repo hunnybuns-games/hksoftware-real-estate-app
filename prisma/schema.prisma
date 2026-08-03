@@ -1,0 +1,398 @@
+// Property management MVP — data model
+//
+// Money is stored everywhere as integer cents (never floats).
+// Every tenant-facing and staff-facing query is scoped by organizationId;
+// see src/lib/rbac.ts for the guards that enforce it.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN // full control of the organization, including billing + team
+  STAFF // day-to-day property management, no team/billing control
+  OWNER // read-only financial visibility into assigned properties
+  TENANT // scoped to their own lease(s) only
+}
+
+enum UnitStatus {
+  VACANT
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum LeaseStatus {
+  DRAFT
+  ACTIVE
+  ENDED
+}
+
+enum ChargeType {
+  RENT
+  LATE_FEE
+  DEPOSIT
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING // created, awaiting tenant action
+  PROCESSING // ACH in flight (can take 3-5 business days)
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  ACH
+  CARD
+  MANUAL // recorded by staff: cash, check, external transfer
+}
+
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum MaintenancePriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  RENT_DUE
+  RENT_RECEIVED
+  RENT_LATE
+  MAINTENANCE_CREATED
+  MAINTENANCE_UPDATED
+  STAFF_INVITE
+  TENANT_INVITE
+}
+
+enum NotificationStatus {
+  SENT
+  FAILED
+  LOGGED // no email transport configured; recorded for the dev outbox
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy root
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Stripe Connect (destination charges). We never touch funds ourselves.
+  stripeAccountId      String?
+  stripeChargesEnabled Boolean @default(false)
+  stripePayoutsEnabled Boolean @default(false)
+
+  // Org-wide rent policy defaults, overridable per lease.
+  graceDays     Int @default(5)
+  lateFeeCents  Int @default(5000)
+
+  users               User[]
+  properties          Property[]
+  tenants             Tenant[]
+  leases              Lease[]
+  invitations         Invitation[]
+  maintenanceRequests MaintenanceRequest[]
+  notifications       NotificationLog[]
+}
+
+model User {
+  id             String        @id @default(cuid())
+  email          String        @unique
+  name           String
+  passwordHash   String
+  role           Role
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  lastLoginAt    DateTime?
+
+  tenant           Tenant?
+  ownedProperties  PropertyOwner[]
+  maintenanceNotes MaintenanceNote[]
+  requestsCreated  MaintenanceRequest[] @relation("MaintenanceRequestCreatedBy")
+
+  @@index([organizationId])
+}
+
+model Invitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  name           String
+  role           Role
+  token          String       @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  // Set when inviting an existing Tenant record to the portal.
+  tenantId String? @unique
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+}
+
+// ---------------------------------------------------------------------------
+// Portfolio
+// ---------------------------------------------------------------------------
+
+model Property {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  addressLine1   String
+  addressLine2   String?
+  city           String
+  state          String
+  postalCode     String
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  units  Unit[]
+  owners PropertyOwner[]
+
+  @@index([organizationId])
+}
+
+// Join table so an OWNER user can be granted read-only access to specific
+// properties without seeing the rest of the portfolio.
+model PropertyOwner {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([propertyId, userId])
+  @@index([userId])
+}
+
+model Unit {
+  id         String     @id @default(cuid())
+  propertyId String
+  property   Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  label      String // "2B", "Unit 4", "House"
+  bedrooms   Int        @default(1)
+  bathrooms  Float      @default(1)
+  sqft       Int?
+  marketRentCents Int   @default(0)
+  status     UnitStatus @default(VACANT)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  leases              Lease[]
+  maintenanceRequests MaintenanceRequest[]
+
+  @@unique([propertyId, label])
+  @@index([propertyId])
+}
+
+// ---------------------------------------------------------------------------
+// People & leases
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  firstName      String
+  lastName       String
+  email          String
+  phone          String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Populated once the tenant accepts a portal invitation.
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  leases     Lease[]
+  invitation Invitation?
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+}
+
+model Lease {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String
+  unit           Unit         @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  status         LeaseStatus @default(ACTIVE)
+  startDate      DateTime
+  endDate        DateTime?
+  rentAmountCents Int
+  depositCents   Int         @default(0)
+  rentDueDay     Int         @default(1) // day of month rent is due, 1-28
+  notes          String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  charges             Charge[]
+  payments            Payment[]
+  maintenanceRequests MaintenanceRequest[]
+
+  @@index([organizationId])
+  @@index([unitId])
+  @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Ledger: what is owed (Charge) vs. what came in (Payment)
+// ---------------------------------------------------------------------------
+
+model Charge {
+  id          String     @id @default(cuid())
+  leaseId     String
+  lease       Lease      @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  type        ChargeType @default(RENT)
+  amountCents Int
+  dueDate     DateTime
+  description String
+  // For RENT charges: the first day of the month the charge covers. Used as an
+  // idempotency key so a rent run can never double-bill a period.
+  periodStart DateTime?
+  voidedAt    DateTime?
+  createdAt   DateTime   @default(now())
+
+  payments Payment[]
+
+  @@unique([leaseId, type, periodStart])
+  @@index([leaseId])
+  @@index([dueDate])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  leaseId     String
+  lease       Lease         @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  chargeId    String?
+  charge      Charge?       @relation(fields: [chargeId], references: [id], onDelete: SetNull)
+  amountCents Int
+  status      PaymentStatus @default(PENDING)
+  method      PaymentMethod
+  memo        String?
+
+  stripeCheckoutSessionId String? @unique
+  stripePaymentIntentId   String? @unique
+
+  paidAt    DateTime?
+  failedAt  DateTime?
+  failureMessage String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leaseId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Maintenance
+// ---------------------------------------------------------------------------
+
+model MaintenanceRequest {
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String
+  unit           Unit                @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  leaseId        String?
+  lease          Lease?              @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  createdByUserId String?
+  createdBy      User?               @relation("MaintenanceRequestCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  title       String
+  description String
+  status      MaintenanceStatus   @default(OPEN)
+  priority    MaintenancePriority @default(NORMAL)
+  resolvedAt  DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  photos MaintenancePhoto[]
+  notes  MaintenanceNote[]
+
+  @@index([organizationId, status])
+  @@index([unitId])
+}
+
+// Photos live in Postgres as bytes. This keeps the MVP deployable with nothing
+// but a database — no S3 bucket, no signed URLs, no extra vendor. Uploads are
+// capped (see src/lib/constants.ts); swap for object storage when volume grows.
+model MaintenancePhoto {
+  id          String             @id @default(cuid())
+  requestId   String
+  request     MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  filename    String
+  contentType String
+  sizeBytes   Int
+  data        Bytes
+  createdAt   DateTime           @default(now())
+
+  @@index([requestId])
+}
+
+model MaintenanceNote {
+  id        String             @id @default(cuid())
+  requestId String
+  request   MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?              @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  // Internal notes are hidden from the tenant portal.
+  internal  Boolean            @default(false)
+  createdAt DateTime           @default(now())
+
+  @@index([requestId])
+}
+
+// ---------------------------------------------------------------------------
+// Email audit trail (also powers the dev outbox at /app/settings/outbox)
+// ---------------------------------------------------------------------------
+
+model NotificationLog {
+  id             String             @id @default(cuid())
+  organizationId String?
+  organization   Organization?      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type           NotificationType
+  status         NotificationStatus
+  toEmail        String
+  subject        String
+  body           String
+  error          String?
+  // Idempotency key so a repeated rent run doesn't re-send the same reminder.
+  dedupeKey      String?            @unique
+  createdAt      DateTime           @default(now())
+
+  @@index([organizationId, createdAt])
+}
