@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { db } from "@/lib/db";
 import { getStripe, stripeEnabled } from "@/lib/stripe";
 import { notifyRentReceived } from "@/lib/notifications";
+import { applyReconciliation } from "@/lib/reconciliation";
 
 /**
  * Stripe is the source of truth for anything it processed. This handler is the
@@ -89,11 +90,18 @@ async function handleEvent(event: Stripe.Event): Promise<void> {
     case "charge.refunded": {
       const charge = event.data.object as Stripe.Charge;
       if (typeof charge.payment_intent === "string") {
+        const refunded = await db.payment.findUnique({
+          where: { stripePaymentIntentId: charge.payment_intent },
+          select: { id: true, leaseId: true },
+        });
         await db.payment.updateMany({
           where: { stripePaymentIntentId: charge.payment_intent },
           data: { status: "REFUNDED" },
         });
-        revalidateAll();
+        // A refund pulls money back out of what covered a period — always
+        // recompute rather than leave the old MATCHED/LATE call stale.
+        if (refunded?.leaseId) await applyReconciliation(refunded.leaseId);
+        revalidateAll(refunded?.leaseId);
       }
       break;
     }
@@ -145,6 +153,7 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session): Promise<vo
   });
 
   await sendReceipt(payment.id, !settled);
+  if (payment.leaseId) await applyReconciliation(payment.leaseId);
   revalidateAll(payment.leaseId);
 }
 
@@ -171,6 +180,7 @@ async function onIntentSucceeded(intent: Stripe.PaymentIntent): Promise<void> {
   });
 
   await sendReceipt(payment.id, false);
+  if (payment.leaseId) await applyReconciliation(payment.leaseId);
   revalidateAll(payment.leaseId);
 }
 
@@ -192,6 +202,9 @@ async function onIntentFailed(intent: Stripe.PaymentIntent): Promise<void> {
         "The bank declined the transfer.",
     },
   });
+  // The failed attempt was PROCESSING (crediting) money that just stopped
+  // counting — periods it looked like it covered may now be short.
+  if (payment.leaseId) await applyReconciliation(payment.leaseId);
   revalidateAll(payment.leaseId);
 }
 
@@ -209,6 +222,7 @@ async function setStatusByIntent(
     where: { id: payment.id },
     data: { status, stripePaymentIntentId: intent.id },
   });
+  if (payment.leaseId) await applyReconciliation(payment.leaseId);
   revalidateAll(payment.leaseId);
 }
 
@@ -265,7 +279,14 @@ async function sendReceipt(paymentId: string, processing: boolean): Promise<void
       },
     },
   });
-  if (!payment) return;
+  // A Stripe-collected payment is always initiated from a specific tenant's
+  // lease (see startRentPaymentAction) — it should never be leaseless. If it
+  // somehow is, there's no tenant to email; log and move on rather than crash
+  // the webhook handler over a receipt.
+  if (!payment?.lease) {
+    console.warn(`[stripe] payment ${paymentId} has no lease; skipping receipt`);
+    return;
+  }
 
   await notifyRentReceived({
     to: {
@@ -279,7 +300,7 @@ async function sendReceipt(paymentId: string, processing: boolean): Promise<void
   });
 }
 
-function revalidateAll(leaseId?: string) {
+function revalidateAll(leaseId?: string | null) {
   revalidatePath("/app");
   revalidatePath("/app/payments");
   revalidatePath("/portal");

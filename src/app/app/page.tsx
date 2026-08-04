@@ -4,6 +4,7 @@ import { requireStaff } from "@/lib/rbac";
 import { getPortfolioSummary } from "@/lib/portfolio";
 import { formatCents, formatCentsShort } from "@/lib/money";
 import { formatDate, relativeDays } from "@/lib/dates";
+import { PAYMENT_SOURCE_SHORT_LABELS } from "@/lib/payment-source";
 import {
   Badge,
   Banner,
@@ -30,7 +31,9 @@ export default async function DashboardPage({
       select: { name: true, stripeChargesEnabled: true, stripeAccountId: true },
     }),
     db.payment.findMany({
-      where: { lease: { organizationId: ctx.organizationId } },
+      // Queried by organizationId directly (not through `lease: {...}`) so
+      // UNMATCHED payments — which have no lease — still appear here.
+      where: { organizationId: ctx.organizationId },
       orderBy: { createdAt: "desc" },
       take: 6,
       select: {
@@ -38,6 +41,7 @@ export default async function DashboardPage({
         amountCents: true,
         status: true,
         method: true,
+        source: true,
         paidAt: true,
         createdAt: true,
         lease: {
@@ -276,10 +280,10 @@ export default async function DashboardPage({
                   <li key={p.id} className="flex items-center justify-between gap-4 px-5 py-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-slate-900">
-                        {p.lease.tenant.firstName} {p.lease.tenant.lastName}
+                        {p.lease ? `${p.lease.tenant.firstName} ${p.lease.tenant.lastName}` : "Unmatched"}
                       </p>
                       <p className="truncate text-xs text-slate-500">
-                        {p.lease.unit.property.name} · {p.lease.unit.label} ·{" "}
+                        {p.lease ? `${p.lease.unit.property.name} · ${p.lease.unit.label} · ` : ""}
                         {formatDate(p.paidAt ?? p.createdAt)}
                       </p>
                     </div>
@@ -289,9 +293,7 @@ export default async function DashboardPage({
                       </p>
                       <p className="text-xs text-slate-500">
                         {p.status === "SUCCEEDED"
-                          ? p.method === "MANUAL"
-                            ? "Recorded"
-                            : "Paid"
+                          ? PAYMENT_SOURCE_SHORT_LABELS[p.source]
                           : p.status === "PROCESSING"
                             ? "Clearing"
                             : p.status.toLowerCase()}

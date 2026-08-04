@@ -9,6 +9,7 @@ import { endLeaseAction, updateLeaseAction } from "@/actions/leases";
 import { addChargeAction, recordManualPaymentAction, voidChargeAction } from "@/actions/payments";
 import { centsToInputValue, formatCents } from "@/lib/money";
 import { formatDate, relativeDays, toDateInputValue } from "@/lib/dates";
+import { getRentSplit } from "@/lib/rent-split";
 import {
   Badge,
   Banner,
@@ -17,7 +18,9 @@ import {
   DescriptionList,
   LeaseStatusBadge,
   PageHeader,
+  PaymentSourceBadge,
   PaymentStatusBadge,
+  ReconciliationStatusBadge,
   StatTile,
   Table,
 } from "@/components/ui";
@@ -56,6 +59,7 @@ export default async function LeaseDetailPage({
 
   const { units, tenants } = await getLeaseFormOptions(ctx.organizationId);
   const { balance } = lease;
+  const rentSplit = getRentSplit(lease);
   const tenantName = `${lease.tenant.firstName} ${lease.tenant.lastName}`;
 
   return (
@@ -186,6 +190,7 @@ export default async function LeaseDetailPage({
                     suggestedAmount={centsToInputValue(
                       balance.balanceCents > 0 ? balance.balanceCents : lease.rentAmountCents,
                     )}
+                    hasSubsidySplit={lease.subsidyOwedCents != null}
                   />
                 </div>
               </Disclosure>
@@ -201,8 +206,9 @@ export default async function LeaseDetailPage({
                 head={
                   <tr>
                     <th className="th">Date</th>
-                    <th className="th">Method</th>
+                    <th className="th">Source</th>
                     <th className="th">Status</th>
+                    <th className="th">Reconciliation</th>
                     <th className="th text-right">Amount</th>
                   </tr>
                 }
@@ -213,11 +219,7 @@ export default async function LeaseDetailPage({
                       {formatDate(payment.paidAt ?? payment.createdAt)}
                     </td>
                     <td className="td">
-                      {payment.method === "MANUAL"
-                        ? "Recorded by staff"
-                        : payment.method === "ACH"
-                          ? "Bank transfer"
-                          : "Card"}
+                      <PaymentSourceBadge source={payment.source} />
                       {payment.memo ? (
                         <span className="block text-xs text-slate-500">{payment.memo}</span>
                       ) : null}
@@ -227,6 +229,9 @@ export default async function LeaseDetailPage({
                     </td>
                     <td className="td">
                       <PaymentStatusBadge status={payment.status} />
+                    </td>
+                    <td className="td">
+                      <ReconciliationStatusBadge status={payment.reconciliationStatus} />
                     </td>
                     <td className="td text-right tabular-nums">{formatCents(payment.amountCents)}</td>
                   </tr>
@@ -250,6 +255,9 @@ export default async function LeaseDetailPage({
                 deposit: centsToInputValue(lease.depositCents),
                 rentDueDay: String(lease.rentDueDay),
                 notes: lease.notes ?? "",
+                subsidyOwedCents:
+                  lease.subsidyOwedCents != null ? centsToInputValue(lease.subsidyOwedCents) : "",
+                subsidyPayerName: lease.subsidyPayerName ?? "",
               }}
               submitLabel="Save lease"
               cancelHref="/app/leases"
@@ -267,6 +275,24 @@ export default async function LeaseDetailPage({
                   label: "Grace period",
                   value: `${lease.organization.graceDays} day${lease.organization.graceDays === 1 ? "" : "s"}`,
                 },
+                ...(rentSplit.hasSplit
+                  ? [
+                      {
+                        label: "Rent split",
+                        value: (
+                          <>
+                            {formatCents(rentSplit.tenantOwedCents)} tenant +{" "}
+                            {formatCents(rentSplit.subsidyOwedCents)} subsidy
+                            {lease.subsidyPayerName ? (
+                              <span className="block text-xs text-slate-500">
+                                {lease.subsidyPayerName}
+                              </span>
+                            ) : null}
+                          </>
+                        ),
+                      },
+                    ]
+                  : []),
                 {
                   label: "Tenant email",
                   value: (

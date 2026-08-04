@@ -79,6 +79,8 @@ export default async function NewLeasePage({
             deposit: selectedUnit?.marketRent ?? "",
             rentDueDay: "1",
             notes: "",
+            subsidyOwedCents: "",
+            subsidyPayerName: "",
           }}
           submitLabel="Create lease"
           cancelHref="/app/leases"

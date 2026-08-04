@@ -7,10 +7,13 @@ import { formatCents, formatCentsShort } from "@/lib/money";
 import { formatDate, formatMonth, relativeDays } from "@/lib/dates";
 import {
   Badge,
+  Banner,
   Card,
   EmptyState,
   PageHeader,
+  PaymentSourceBadge,
   PaymentStatusBadge,
+  ReconciliationStatusBadge,
   StatTile,
   Table,
 } from "@/components/ui";
@@ -21,10 +24,13 @@ export const metadata: Metadata = { title: "Rent" };
 export default async function PaymentsPage() {
   const ctx = await requireStaff();
 
-  const [summary, payments] = await Promise.all([
+  const [summary, payments, unmatched] = await Promise.all([
     getPortfolioSummary({ organizationId: ctx.organizationId }),
+    // organizationId is queried directly (not through `lease: {...}`) so
+    // UNMATCHED payments — which have no lease at all — still show up here
+    // instead of silently vanishing from the activity feed.
     db.payment.findMany({
-      where: { lease: { organizationId: ctx.organizationId } },
+      where: { organizationId: ctx.organizationId },
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {
@@ -36,6 +42,20 @@ export default async function PaymentsPage() {
             unit: { select: { label: true, property: { select: { name: true } } } },
           },
         },
+      },
+    }),
+    db.payment.findMany({
+      where: { organizationId: ctx.organizationId, reconciliationStatus: "UNMATCHED" },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      select: {
+        id: true,
+        amountCents: true,
+        source: true,
+        payerNameRaw: true,
+        memo: true,
+        paidAt: true,
+        createdAt: true,
       },
     }),
   ]);
@@ -52,7 +72,14 @@ export default async function PaymentsPage() {
       <PageHeader
         title="Rent"
         subtitle={formatMonth(new Date())}
-        actions={<RunRentButton />}
+        actions={
+          <>
+            <Link href="/app/payments/import" className="btn-secondary">
+              Import statement
+            </Link>
+            <RunRentButton />
+          </>
+        }
       />
 
       <div className="space-y-6">
@@ -79,6 +106,44 @@ export default async function PaymentsPage() {
             tone={totals.lateLeaseCount > 0 ? "danger" : "default"}
           />
         </div>
+
+        {unmatched.length > 0 ? (
+          <Banner
+            tone="warning"
+            title={`${unmatched.length} payment${unmatched.length === 1 ? "" : "s"} couldn't be matched to a lease`}
+          >
+            These came in from an import or manual entry but don&apos;t point at a tenant yet —
+            they aren&apos;t counted toward anyone&apos;s balance until you assign them below.
+          </Banner>
+        ) : null}
+
+        {unmatched.length > 0 ? (
+          <Card title="Unmatched payments" padded={false}>
+            <Table
+              head={
+                <tr>
+                  <th className="th">Date</th>
+                  <th className="th">Source</th>
+                  <th className="th">Payer / memo</th>
+                  <th className="th text-right">Amount</th>
+                </tr>
+              }
+            >
+              {unmatched.map((p) => (
+                <tr key={p.id} className="hover:bg-slate-50/60">
+                  <td className="td whitespace-nowrap text-slate-500">
+                    {formatDate(p.paidAt ?? p.createdAt)}
+                  </td>
+                  <td className="td">
+                    <PaymentSourceBadge source={p.source} />
+                  </td>
+                  <td className="td text-slate-700">{p.payerNameRaw || p.memo || "—"}</td>
+                  <td className="td text-right tabular-nums">{formatCents(p.amountCents)}</td>
+                </tr>
+              ))}
+            </Table>
+          </Card>
+        ) : null}
 
         <Card title="Outstanding balances" padded={false}>
           {behind.length === 0 ? (
@@ -147,7 +212,7 @@ export default async function PaymentsPage() {
           {payments.length === 0 ? (
             <EmptyState
               title="No payments yet"
-              description="Once a resident pays through their portal — or you record a check — it shows up here."
+              description="Once a resident pays through their portal, you record a payment, or you import a statement, it shows up here."
             />
           ) : (
             <Table
@@ -156,8 +221,9 @@ export default async function PaymentsPage() {
                   <th className="th">Date</th>
                   <th className="th">Tenant</th>
                   <th className="th">Unit</th>
-                  <th className="th">Method</th>
+                  <th className="th">Source</th>
                   <th className="th">Status</th>
+                  <th className="th">Reconciliation</th>
                   <th className="th text-right">Amount</th>
                 </tr>
               }
@@ -168,18 +234,25 @@ export default async function PaymentsPage() {
                     {formatDate(p.paidAt ?? p.createdAt)}
                   </td>
                   <td className="td">
-                    <Link href={`/app/leases/${p.lease.id}`} className="hover:underline">
-                      {p.lease.tenant.firstName} {p.lease.tenant.lastName}
-                    </Link>
+                    {p.lease ? (
+                      <Link href={`/app/leases/${p.lease.id}`} className="hover:underline">
+                        {p.lease.tenant.firstName} {p.lease.tenant.lastName}
+                      </Link>
+                    ) : (
+                      <span className="text-amber-700">Unmatched</span>
+                    )}
                   </td>
                   <td className="td text-slate-500">
-                    {p.lease.unit.property.name} · {p.lease.unit.label}
+                    {p.lease ? `${p.lease.unit.property.name} · ${p.lease.unit.label}` : "—"}
                   </td>
-                  <td className="td text-slate-500">
-                    {p.method === "MANUAL" ? "Recorded" : p.method === "ACH" ? "Bank transfer" : "Card"}
+                  <td className="td">
+                    <PaymentSourceBadge source={p.source} />
                   </td>
                   <td className="td">
                     <PaymentStatusBadge status={p.status} />
+                  </td>
+                  <td className="td">
+                    <ReconciliationStatusBadge status={p.reconciliationStatus} />
                   </td>
                   <td className="td text-right tabular-nums">{formatCents(p.amountCents)}</td>
                 </tr>

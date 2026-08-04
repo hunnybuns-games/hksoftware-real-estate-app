@@ -57,6 +57,42 @@ enum PaymentMethod {
   MANUAL // recorded by staff: cash, check, external transfer
 }
 
+// Where a payment actually came from. This is the primary axis for
+// reconciliation — `PaymentMethod` above is a narrower, Stripe-specific detail
+// (ACH vs card) that only ever applies to STRIPE_NATIVE payments now.
+enum PaymentSource {
+  MANUAL_CASH // cash, check, or anything hand-recorded with no statement to import
+  IMPORT_BANK // bank/ACH statement CSV
+  IMPORT_VENMO
+  IMPORT_CASHAPP
+  IMPORT_HAP // housing authority / Section 8 subsidy payment report
+  STRIPE_NATIVE // collected in-app via Stripe Connect
+}
+
+// Set by the reconciliation engine only — never directly editable in a form.
+// See src/lib/reconciliation.ts for the exact rules.
+enum PaymentReconciliationStatus {
+  UNMATCHED // no lease could be associated with this payment
+  MATCHED // cleanly applied; its period is fully covered and on time
+  SHORT // applied to a period whose combined payments don't cover the charge
+  LATE // completed its period's coverage, but after the due date + grace
+}
+
+enum ImportBatchStatus {
+  DRAFT // uploaded and parsed, awaiting column-mapping/lease-match review
+  CONFIRMED // rows became real Payment records
+}
+
+enum ExpenseCategory {
+  REPAIRS_MAINTENANCE
+  UTILITIES
+  INSURANCE
+  TAXES
+  MANAGEMENT_FEES
+  MORTGAGE
+  OTHER
+}
+
 enum MaintenanceStatus {
   OPEN
   IN_PROGRESS
@@ -102,8 +138,8 @@ model Organization {
   stripePayoutsEnabled Boolean @default(false)
 
   // Org-wide rent policy defaults, overridable per lease.
-  graceDays     Int @default(5)
-  lateFeeCents  Int @default(5000)
+  graceDays    Int @default(5)
+  lateFeeCents Int @default(5000)
 
   users               User[]
   properties          Property[]
@@ -112,6 +148,9 @@ model Organization {
   invitations         Invitation[]
   maintenanceRequests MaintenanceRequest[]
   notifications       NotificationLog[]
+  payments            Payment[]
+  importBatches       PaymentImportBatch[]
+  expenses            Expense[]
 }
 
 model User {
@@ -130,6 +169,7 @@ model User {
   ownedProperties  PropertyOwner[]
   maintenanceNotes MaintenanceNote[]
   requestsCreated  MaintenanceRequest[] @relation("MaintenanceRequestCreatedBy")
+  importBatches    PaymentImportBatch[]
 
   @@index([organizationId])
 }
@@ -172,8 +212,9 @@ model Property {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  units  Unit[]
-  owners PropertyOwner[]
+  units    Unit[]
+  owners   PropertyOwner[]
+  expenses Expense[]
 
   @@index([organizationId])
 }
@@ -193,17 +234,17 @@ model PropertyOwner {
 }
 
 model Unit {
-  id         String     @id @default(cuid())
-  propertyId String
-  property   Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  label      String // "2B", "Unit 4", "House"
-  bedrooms   Int        @default(1)
-  bathrooms  Float      @default(1)
-  sqft       Int?
-  marketRentCents Int   @default(0)
-  status     UnitStatus @default(VACANT)
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id              String     @id @default(cuid())
+  propertyId      String
+  property        Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  label           String // "2B", "Unit 4", "House"
+  bedrooms        Int        @default(1)
+  bathrooms       Float      @default(1)
+  sqft            Int?
+  marketRentCents Int        @default(0)
+  status          UnitStatus @default(VACANT)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   leases              Lease[]
   maintenanceRequests MaintenanceRequest[]
@@ -248,15 +289,24 @@ model Lease {
   tenantId       String
   tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  status         LeaseStatus @default(ACTIVE)
-  startDate      DateTime
-  endDate        DateTime?
+  status          LeaseStatus @default(ACTIVE)
+  startDate       DateTime
+  endDate         DateTime?
   rentAmountCents Int
-  depositCents   Int         @default(0)
-  rentDueDay     Int         @default(1) // day of month rent is due, 1-28
-  notes          String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  depositCents    Int         @default(0)
+  rentDueDay      Int         @default(1) // day of month rent is due, 1-28
+  notes           String?
+
+  // Subsidized (e.g. Section 8/HAP) arrangements. Null subsidyOwedCents means
+  // "no split" — the whole rentAmountCents is owed by the tenant, as today.
+  // When set, the tenant-owed portion is *derived* (rentAmountCents -
+  // subsidyOwedCents) rather than stored separately, so the two figures can
+  // never drift out of sync after a rent change. See src/lib/rent-split.ts.
+  subsidyOwedCents Int?
+  subsidyPayerName String? // e.g. "Springfield Housing Authority" — free text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   charges             Charge[]
   payments            Payment[]
@@ -293,27 +343,87 @@ model Charge {
 }
 
 model Payment {
-  id          String        @id @default(cuid())
-  leaseId     String
-  lease       Lease         @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  // Direct org scope, independent of leaseId: an imported payment that can't
+  // be matched to any lease (UNMATCHED) still has to live inside its
+  // organization's boundary, so this can't be derived through the lease.
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Null until the reconciliation engine (or a human, during import review)
+  // assigns it. A payment with no lease is always UNMATCHED.
+  leaseId     String?
+  lease       Lease?         @relation(fields: [leaseId], references: [id], onDelete: SetNull)
   chargeId    String?
-  charge      Charge?       @relation(fields: [chargeId], references: [id], onDelete: SetNull)
+  charge      Charge?        @relation(fields: [chargeId], references: [id], onDelete: SetNull)
   amountCents Int
-  status      PaymentStatus @default(PENDING)
-  method      PaymentMethod
+  status      PaymentStatus  @default(PENDING)
+  method      PaymentMethod?
   memo        String?
+
+  source               PaymentSource               @default(MANUAL_CASH)
+  reconciliationStatus PaymentReconciliationStatus @default(UNMATCHED)
+  // As captured from an import row or typed at manual entry — kept verbatim
+  // for audit even after a lease match is made or changed.
+  payerNameRaw         String?
+  // Transaction id / reference from the source file or provider, when one
+  // exists. Not unique on its own (see PaymentImportBatch's content-hash
+  // dedup for the real duplicate-import guard).
+  externalRef          String?
+
+  importBatchId String?
+  importBatch   PaymentImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
 
   stripeCheckoutSessionId String? @unique
   stripePaymentIntentId   String? @unique
 
-  paidAt    DateTime?
-  failedAt  DateTime?
+  paidAt         DateTime?
+  failedAt       DateTime?
   failureMessage String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId])
+  @@index([leaseId])
+  @@index([status])
+  @@index([organizationId, reconciliationStatus])
+  @@index([importBatchId])
+}
+
+// One CSV/statement upload. Kept as its own row (rather than just tagging
+// Payments with a source) so imports have a review step, an audit trail, and
+// a way to stop the same file being imported twice.
+model PaymentImportBatch {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source         PaymentSource
+  status         ImportBatchStatus @default(DRAFT)
+  filename       String
+  uploadedById   String?
+  uploadedBy     User?             @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  // The parsed file, kept for the review screen and for audit ("view
+  // original") after confirmation. Bank/Venmo/CashApp/HAP exports are small
+  // (hundreds of rows at most) so storing the text in Postgres is simple and
+  // avoids standing up object storage for what's fundamentally a rare,
+  // small-file workflow — revisit if imports grow to needing streaming.
+  rawCsv        String
+  // { dateColumn, amountColumn, descriptionColumn, payerColumn, refColumn }
+  columnMapping Json
+  rowCount      Int
+  // SHA-256 of the raw file bytes. Uploading the identical file twice is the
+  // single most common accidental-double-import mistake; this blocks it
+  // outright rather than relying on per-row heuristics.
+  contentHash   String
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([leaseId])
-  @@index([status])
+  payments Payment[]
+
+  @@unique([organizationId, contentHash])
+  @@index([organizationId, createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -321,15 +431,15 @@ model Payment {
 // ---------------------------------------------------------------------------
 
 model MaintenanceRequest {
-  id             String              @id @default(cuid())
-  organizationId String
-  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  unitId         String
-  unit           Unit                @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  leaseId        String?
-  lease          Lease?              @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId          String
+  unit            Unit         @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  leaseId         String?
+  lease           Lease?       @relation(fields: [leaseId], references: [id], onDelete: SetNull)
   createdByUserId String?
-  createdBy      User?               @relation("MaintenanceRequestCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdBy       User?        @relation("MaintenanceRequestCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   title       String
   description String
@@ -395,4 +505,27 @@ model NotificationLog {
   createdAt      DateTime           @default(now())
 
   @@index([organizationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Expenses — the other half of a per-property P&L. Deliberately minimal
+// (no vendor/bill workflow, no recurring rules): a landlord logs what they
+// spent, when, and on which property. See src/lib/reports.ts.
+// ---------------------------------------------------------------------------
+
+model Expense {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  category       ExpenseCategory @default(OTHER)
+  amountCents    Int
+  date           DateTime
+  description    String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([propertyId, date])
 }

@@ -137,6 +137,39 @@ export function PaymentStatusBadge({
   return <Badge tone={tone}>{label}</Badge>;
 }
 
+export function PaymentSourceBadge({
+  source,
+}: {
+  source: "MANUAL_CASH" | "IMPORT_BANK" | "IMPORT_VENMO" | "IMPORT_CASHAPP" | "IMPORT_HAP" | "STRIPE_NATIVE";
+}) {
+  const map = {
+    MANUAL_CASH: { tone: "slate", label: "Cash / check" },
+    IMPORT_BANK: { tone: "neutral", label: "Bank transfer" },
+    IMPORT_VENMO: { tone: "blue", label: "Venmo" },
+    IMPORT_CASHAPP: { tone: "blue", label: "Cash App" },
+    IMPORT_HAP: { tone: "green", label: "HAP" },
+    STRIPE_NATIVE: { tone: "blue", label: "Online" },
+  } as const;
+  const { tone, label } = map[source];
+  return <Badge tone={tone}>{label}</Badge>;
+}
+
+/** Set by the reconciliation engine, not a user — see src/lib/reconciliation.ts. */
+export function ReconciliationStatusBadge({
+  status,
+}: {
+  status: "UNMATCHED" | "MATCHED" | "SHORT" | "LATE";
+}) {
+  const map = {
+    MATCHED: { tone: "green", label: "Matched" },
+    SHORT: { tone: "red", label: "Short" },
+    LATE: { tone: "amber", label: "Late" },
+    UNMATCHED: { tone: "slate", label: "Unmatched" },
+  } as const;
+  const { tone, label } = map[status];
+  return <Badge tone={tone}>{label}</Badge>;
+}
+
 export function MaintenanceStatusBadge({
   status,
 }: {

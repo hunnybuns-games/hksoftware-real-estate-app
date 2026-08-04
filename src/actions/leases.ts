@@ -18,6 +18,7 @@ import {
   runAction,
 } from "@/lib/forms";
 import { generateRentCharges } from "@/lib/ledger";
+import { applyReconciliation } from "@/lib/reconciliation";
 import { startOfUtcDay } from "@/lib/dates";
 
 const leaseSchema = z
@@ -31,12 +32,49 @@ const leaseSchema = z
     depositCents: centsField("Deposit"),
     // Capped at 28 so the due date exists in February.
     rentDueDay: intField("Rent due day", 1, 28),
+    // Subsidized (Section 8/HAP) arrangements: an empty string means no
+    // split at all, matching the nullable DB column exactly.
+    hasSubsidy: z
+      .string()
+      .optional()
+      .transform((v) => v === "on" || v === "true"),
+    subsidyOwedCents: z
+      .string()
+      .optional()
+      .transform((v) => (v ?? "").trim()),
+    subsidyPayerName: optionalText(200),
     notes: optionalText(2000),
   })
   .refine((v) => !v.endDate || v.endDate.getTime() > v.startDate.getTime(), {
     message: "The end date has to be after the start date.",
     path: ["endDate"],
-  });
+  })
+  .superRefine((v, ctx) => {
+    if (!v.hasSubsidy) return;
+    if (!/^\$?\s*\d+(\.\d{1,2})?$/.test(v.subsidyOwedCents)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["subsidyOwedCents"],
+        message: "Enter the subsidy amount as a dollar figure, e.g. 450.",
+      });
+      return;
+    }
+    const cents = Math.round(Number(v.subsidyOwedCents.replace(/[$,\s]/g, "")) * 100);
+    if (cents > v.rentAmountCents) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["subsidyOwedCents"],
+        message: "The subsidy portion can't be more than the total rent.",
+      });
+    }
+  })
+  .transform(({ hasSubsidy, subsidyOwedCents, subsidyPayerName, ...rest }) => ({
+    ...rest,
+    subsidyOwedCents: hasSubsidy
+      ? Math.round(Number(subsidyOwedCents.replace(/[$,\s]/g, "")) * 100)
+      : null,
+    subsidyPayerName: hasSubsidy ? subsidyPayerName ?? null : null,
+  }));
 
 export async function createLeaseAction(
   _prev: ActionState,
@@ -91,6 +129,7 @@ export async function createLeaseAction(
     // created.
     if (data.status === "ACTIVE") {
       await generateRentCharges({ organizationId });
+      await applyReconciliation(lease.id);
     }
 
     newId = lease.id;
@@ -172,6 +211,11 @@ export async function updateLeaseAction(
     });
 
     if (data.status === "ACTIVE") await generateRentCharges({ organizationId });
+
+    // Rent, due day, or the subsidy split may have just changed — every
+    // period's coverage math depends on those, so recompute from scratch
+    // rather than leave stale statuses on existing payments.
+    await applyReconciliation(existing.id);
 
     revalidateLeaseViews(leaseId);
     return actionOk("Lease saved.");

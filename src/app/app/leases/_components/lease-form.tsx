@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   ActionForm,
   Field,
@@ -32,6 +33,8 @@ export type LeaseFormValues = {
   deposit: string;
   rentDueDay: string;
   notes: string;
+  subsidyOwedCents: string; // "" means no subsidy split
+  subsidyPayerName: string;
 };
 
 export function LeaseForm({
@@ -49,6 +52,8 @@ export function LeaseForm({
   submitLabel: string;
   cancelHref: string;
 }) {
+  const [hasSubsidy, setHasSubsidy] = useState(defaults.subsidyOwedCents !== "");
+
   return (
     <ActionForm action={action} successMessage>
       {(state) => (
@@ -102,7 +107,13 @@ export function LeaseForm({
               <TextInput name="endDate" state={state} type="date" defaultValue={defaults.endDate} />
             </Field>
 
-            <Field label="Monthly rent" name="rentAmountCents" state={state} required>
+            <Field
+              label="Monthly rent"
+              name="rentAmountCents"
+              state={state}
+              required
+              hint="The full contracted rent, even if part is subsidized below."
+            >
               <MoneyInput
                 name="rentAmountCents"
                 state={state}
@@ -149,6 +160,58 @@ export function LeaseForm({
                 <option value="ENDED">Ended</option>
               </Select>
             </Field>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 p-4">
+            <label className="flex items-start gap-2.5 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                name="hasSubsidy"
+                checked={hasSubsidy}
+                onChange={(e) => setHasSubsidy(e.currentTarget.checked)}
+                className="mt-0.5 size-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/30"
+              />
+              <span>
+                Part of this rent is subsidized (Section 8 / HAP)
+                <span className="block text-xs text-slate-500">
+                  A housing authority pays part of the rent directly; the tenant owes the rest.
+                  Payments from either side count toward the same monthly charge — nothing is
+                  flagged short unless the combined total comes up short.
+                </span>
+              </span>
+            </label>
+
+            {hasSubsidy ? (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Subsidy amount"
+                  name="subsidyOwedCents"
+                  state={state}
+                  required
+                  hint="What the housing authority pays each month. The rest is owed by the tenant."
+                >
+                  <MoneyInput
+                    name="subsidyOwedCents"
+                    state={state}
+                    defaultValue={defaults.subsidyOwedCents}
+                    required
+                  />
+                </Field>
+                <Field
+                  label="Housing authority"
+                  name="subsidyPayerName"
+                  state={state}
+                  hint="Who sends the subsidy payment — for your own records."
+                >
+                  <TextInput
+                    name="subsidyPayerName"
+                    state={state}
+                    defaultValue={defaults.subsidyPayerName}
+                    placeholder="Springfield Housing Authority"
+                  />
+                </Field>
+              </div>
+            ) : null}
           </div>
 
           <Field label="Notes" name="notes" state={state} hint="Internal only.">

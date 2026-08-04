@@ -152,9 +152,24 @@ async function main() {
   // Lease ~85% of units so occupancy and vacancy loss are both non-trivial.
   const leaseCount = Math.min(people.length, Math.floor(allUnits.length * 0.85));
 
-  type Scenario = "current" | "grace" | "late" | "very_late" | "in_flight" | "credit";
+  type Scenario =
+    | "current"
+    | "grace"
+    | "late"
+    | "very_late"
+    | "in_flight"
+    | "credit"
+    | "hap_split"
+    | "hap_split_short";
 
-  const leases: { id: string; scenario: Scenario; rentCents: number; dueDay: number; startedMonthsAgo: number }[] = [];
+  const leases: {
+    id: string;
+    scenario: Scenario;
+    rentCents: number;
+    dueDay: number;
+    startedMonthsAgo: number;
+    subsidyCents: number | null;
+  }[] = [];
 
   for (let i = 0; i < leaseCount; i += 1) {
     const [firstName, lastName] = people[i];
@@ -178,11 +193,20 @@ async function main() {
       : i === 2 ? "grace"
       : i === 3 ? "in_flight"
       : i === 4 ? "credit"
+      : i === 5 ? "hap_split"
+      : i === 6 ? "hap_split_short"
       : "current";
 
     const startedMonthsAgo = 3 + (i % 9);
     const rentCents = unit.marketRentCents - (i % 3) * 25_00;
     const dueDay = i % 4 === 0 ? 5 : 1;
+    // A little under half the rent, on a HAP-split lease — the tenant covers
+    // the rest. Chosen so it never evenly divides the total, which is the
+    // realistic case and exercises the "combined total, not exact halves" rule.
+    const subsidyCents =
+      scenario === "hap_split" || scenario === "hap_split_short"
+        ? Math.round(rentCents * 0.42)
+        : null;
 
     const lease = await db.lease.create({
       data: {
@@ -199,11 +223,13 @@ async function main() {
         rentAmountCents: rentCents,
         depositCents: rentCents,
         rentDueDay: dueDay,
+        subsidyOwedCents: subsidyCents,
+        subsidyPayerName: subsidyCents !== null ? "Portland Housing Authority" : null,
       },
     });
 
     await db.unit.update({ where: { id: unit.id }, data: { status: "OCCUPIED" } });
-    leases.push({ id: lease.id, scenario, rentCents, dueDay, startedMonthsAgo });
+    leases.push({ id: lease.id, scenario, rentCents, dueDay, startedMonthsAgo, subsidyCents });
   }
 
   // Mark two unleased units as off-market so the status enum is exercised.
@@ -245,31 +271,107 @@ async function main() {
     }
 
     // How many of the oldest charges get paid in full, and how.
+    // hap_split_short leaves the tenant's last 2 months unpaid (HAP's share
+    // still shows up on time) — genuinely uncovered, with no later payment
+    // to ever catch it up, which is what makes SHORT durable rather than a
+    // shortfall that resolves itself into merely LATE a month later.
     const unpaidTail =
       lease.scenario === "very_late" ? 3
       : lease.scenario === "late" ? 1
       : lease.scenario === "grace" ? 1
       : lease.scenario === "in_flight" ? 1
+      : lease.scenario === "hap_split_short" ? 2
       : 0;
 
     const settledCount = Math.max(0, charges.length - unpaidTail);
 
-    for (let i = 0; i < settledCount; i += 1) {
-      const charge = charges[i];
-      const paidAt = new Date(charge.dueDate.getTime() + (i % 3) * 86_400_000);
-      const method: Prisma.PaymentCreateInput["method"] = i % 5 === 0 ? "MANUAL" : "ACH";
-      await db.payment.create({
-        data: {
-          leaseId: lease.id,
-          chargeId: charge.id,
-          amountCents: charge.amountCents,
-          status: "SUCCEEDED",
-          method,
-          paidAt,
-          memo: method === "MANUAL" ? `Check #${2100 + i}` : "Online payment",
-        },
-      });
-      paymentCount += 1;
+    if (lease.scenario === "hap_split" || lease.scenario === "hap_split_short") {
+      // Every month, the housing authority's share arrives separately from
+      // the tenant's — two payments, two sources, one charge, always summing
+      // to the full charge.
+      const subsidyCents = lease.subsidyCents!;
+
+      for (let i = 0; i < settledCount; i += 1) {
+        const charge = charges[i];
+        const hapPaidAt = new Date(charge.dueDate.getTime() - 2 * 86_400_000); // HAP pays a couple days early
+        const tenantPaidAt = new Date(charge.dueDate.getTime() + (i % 3) * 86_400_000);
+
+        await db.payment.create({
+          data: {
+            organizationId: org.id,
+            leaseId: lease.id,
+            chargeId: charge.id,
+            amountCents: subsidyCents,
+            status: "SUCCEEDED",
+            source: "IMPORT_HAP",
+            reconciliationStatus: "MATCHED",
+            paidAt: hapPaidAt,
+            payerNameRaw: "PORTLAND HOUSING AUTHORITY",
+            memo: "HAP subsidy payment",
+          },
+        });
+        paymentCount += 1;
+
+        await db.payment.create({
+          data: {
+            organizationId: org.id,
+            leaseId: lease.id,
+            chargeId: charge.id,
+            amountCents: charge.amountCents - subsidyCents,
+            status: "SUCCEEDED",
+            source: i % 2 === 0 ? "IMPORT_VENMO" : "MANUAL_CASH",
+            reconciliationStatus: "MATCHED",
+            paidAt: tenantPaidAt,
+            memo: "Tenant portion",
+          },
+        });
+        paymentCount += 1;
+      }
+
+      // hap_split_short's unpaid tail: the housing authority keeps paying
+      // its share on time even though the tenant has stopped paying theirs
+      // — a realistic (and common) way a subsidized lease goes short.
+      if (lease.scenario === "hap_split_short") {
+        for (let i = settledCount; i < charges.length; i += 1) {
+          const charge = charges[i];
+          await db.payment.create({
+            data: {
+              organizationId: org.id,
+              leaseId: lease.id,
+              chargeId: charge.id,
+              amountCents: subsidyCents,
+              status: "SUCCEEDED",
+              source: "IMPORT_HAP",
+              reconciliationStatus: "MATCHED",
+              paidAt: new Date(charge.dueDate.getTime() - 2 * 86_400_000),
+              payerNameRaw: "PORTLAND HOUSING AUTHORITY",
+              memo: "HAP subsidy payment",
+            },
+          });
+          paymentCount += 1;
+        }
+      }
+    } else {
+      for (let i = 0; i < settledCount; i += 1) {
+        const charge = charges[i];
+        const paidAt = new Date(charge.dueDate.getTime() + (i % 3) * 86_400_000);
+        const method: Prisma.PaymentCreateInput["method"] = i % 5 === 0 ? "MANUAL" : "ACH";
+        await db.payment.create({
+          data: {
+            organizationId: org.id,
+            leaseId: lease.id,
+            chargeId: charge.id,
+            amountCents: charge.amountCents,
+            status: "SUCCEEDED",
+            method,
+            source: method === "MANUAL" ? "MANUAL_CASH" : "STRIPE_NATIVE",
+            reconciliationStatus: "MATCHED",
+            paidAt,
+            memo: method === "MANUAL" ? `Check #${2100 + i}` : "Online payment",
+          },
+        });
+        paymentCount += 1;
+      }
     }
 
     // The in-flight case: this month's rent submitted but still clearing.
@@ -277,11 +379,14 @@ async function main() {
       const last = charges[charges.length - 1];
       await db.payment.create({
         data: {
+          organizationId: org.id,
           leaseId: lease.id,
           chargeId: last.id,
           amountCents: last.amountCents,
           status: "PROCESSING",
           method: "ACH",
+          source: "STRIPE_NATIVE",
+          reconciliationStatus: "MATCHED",
           memo: "Online payment",
         },
       });
@@ -292,10 +397,13 @@ async function main() {
     if (lease.scenario === "credit") {
       await db.payment.create({
         data: {
+          organizationId: org.id,
           leaseId: lease.id,
           amountCents: lease.rentCents,
           status: "SUCCEEDED",
           method: "ACH",
+          source: "STRIPE_NATIVE",
+          reconciliationStatus: "MATCHED",
           paidAt: new Date(),
           memo: "Paid ahead",
         },
@@ -404,6 +512,31 @@ async function main() {
     where: { id: firstLease.tenantId },
     data: { userId: tenantUser.id, email: "tenant@example.com" },
   });
+
+  // An unmatched import: a Cash App payment that landed with a payer name
+  // that doesn't correspond to anyone on file — exactly the kind of thing
+  // the "unmatched payments" panel exists to surface.
+  await db.payment.create({
+    data: {
+      organizationId: org.id,
+      leaseId: null,
+      amountCents: 92_000,
+      status: "SUCCEEDED",
+      source: "IMPORT_CASHAPP",
+      reconciliationStatus: "UNMATCHED",
+      paidAt: monthsAgo(0),
+      payerNameRaw: "$randomhandle22",
+      memo: "Cash App transfer",
+    },
+  });
+  paymentCount += 1;
+
+  // Every status above was written as a reasonable placeholder at insert
+  // time — this is the one pass that actually runs the reconciliation engine
+  // against the real charge history, so the demo data shows genuinely
+  // computed MATCHED/SHORT/LATE calls rather than hand-set ones.
+  const { applyReconciliationForOrganization } = await import("../src/lib/reconciliation");
+  await applyReconciliationForOrganization(org.id);
 
   const unitTotal = await db.unit.count({ where: { property: { organizationId: org.id } } });
 

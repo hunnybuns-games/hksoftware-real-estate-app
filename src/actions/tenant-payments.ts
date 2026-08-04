@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { assertTenant } from "@/lib/rbac";
 import { type ActionState, actionError, actionOk, runAction } from "@/lib/forms";
 import { computeBalance } from "@/lib/ledger";
+import { applyReconciliation } from "@/lib/reconciliation";
 import { createRentCheckoutSession, stripeEnabled } from "@/lib/stripe";
 import { appUrl } from "@/lib/email";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
@@ -80,9 +81,11 @@ export async function startRentPaymentAction(
 
     const payment = await db.payment.create({
       data: {
+        organizationId: lease.organizationId,
         leaseId: lease.id,
         amountCents,
         method: "ACH",
+        source: "STRIPE_NATIVE",
         status: "PENDING",
         memo: "Online payment",
       },
@@ -177,14 +180,18 @@ export async function simulatePaymentAction(
 
     await db.payment.create({
       data: {
+        organizationId: lease.organizationId,
         leaseId: lease.id,
         amountCents,
         method: "ACH",
+        source: "STRIPE_NATIVE",
         status: "SUCCEEDED",
         paidAt: new Date(),
         memo: "Demo payment (no money moved)",
       },
     });
+
+    await applyReconciliation(lease.id);
 
     await notifyRentReceived({
       to: { email: lease.tenant.email, name: lease.tenant.firstName },
