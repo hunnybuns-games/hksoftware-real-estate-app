@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { requireOwner } from "@/lib/rbac";
 import { getPortfolioSummary } from "@/lib/portfolio";
@@ -64,7 +65,15 @@ export default async function OwnerDashboardPage() {
         />
       </div>
 
-      <Card title="By property" padded={false}>
+      <Card
+        title="By property"
+        padded={false}
+        actions={
+          <a href="/api/export/rent-roll" className="btn-secondary">
+            Export CSV
+          </a>
+        }
+      >
         <Table
           head={
             <tr>
@@ -73,6 +82,7 @@ export default async function OwnerDashboardPage() {
               <th className="th text-right">Rent roll</th>
               <th className="th text-right">Collected</th>
               <th className="th text-right">Outstanding</th>
+              <th className="th"></th>
             </tr>
           }
         >
@@ -99,6 +109,11 @@ export default async function OwnerDashboardPage() {
                 ) : (
                   <span className="text-slate-400">—</span>
                 )}
+              </td>
+              <td className="td text-right">
+                <Link href={`/owner/reports/${p.id}`} className="link">
+                  Statement
+                </Link>
               </td>
             </tr>
           ))}

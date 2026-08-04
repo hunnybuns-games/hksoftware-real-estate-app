@@ -147,3 +147,29 @@ export async function assertTenant(): Promise<TenantContext> {
     tenantId: u.tenantId,
   };
 }
+
+/**
+ * Server-action/API-route equivalent of requireOwner. Used by the CSV export
+ * routes, which need JSON error responses rather than a page redirect.
+ */
+export async function assertOwner(): Promise<OwnerContext> {
+  const session = await auth();
+  const u = session?.user;
+  if (!u?.id) throw new AuthorizationError("You need to sign in.");
+  if (u.role !== "OWNER" || !u.organizationId) throw new AuthorizationError();
+
+  const links = await db.propertyOwner.findMany({
+    where: { userId: u.id, property: { organizationId: u.organizationId } },
+    select: { propertyId: true },
+  });
+
+  return {
+    id: u.id,
+    email: u.email ?? "",
+    name: u.name ?? "",
+    role: u.role,
+    organizationId: u.organizationId,
+    tenantId: u.tenantId,
+    propertyIds: links.map((l) => l.propertyId),
+  };
+}

@@ -28,14 +28,20 @@ async function main() {
   // Idempotent-ish: drop the demo org and everything cascading from it.
   const existing = await db.organization.findFirst({ where: { name: ORG_NAME } });
   if (existing) {
-    // Tenant users aren't cascaded from the org (they hang off Tenant), so
-    // collect them before the org goes.
-    const tenantUsers = await db.user.findMany({
-      where: { organizationId: existing.id },
-      select: { id: true },
-    });
+    // Tenant portal users aren't cascaded from the org (they hang off Tenant
+    // via a nullable FK, not the other way around), so collect them before
+    // the org goes.
+    const [staffUsers, tenantPortalUsers] = await Promise.all([
+      db.user.findMany({ where: { organizationId: existing.id }, select: { id: true } }),
+      db.user.findMany({
+        where: { tenant: { organizationId: existing.id } },
+        select: { id: true },
+      }),
+    ]);
     await db.organization.delete({ where: { id: existing.id } });
-    await db.user.deleteMany({ where: { id: { in: tenantUsers.map((u) => u.id) } } });
+    await db.user.deleteMany({
+      where: { id: { in: [...staffUsers, ...tenantPortalUsers].map((u) => u.id) } },
+    });
     console.log("• removed previous demo data");
   }
 

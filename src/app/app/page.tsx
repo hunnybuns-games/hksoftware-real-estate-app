@@ -11,6 +11,7 @@ import {
   Card,
   EmptyState,
   PageHeader,
+  ReconciliationStatusBadge,
   StatTile,
   Table,
 } from "@/components/ui";
@@ -24,7 +25,7 @@ export default async function DashboardPage({
   const ctx = await requireStaff();
   const { welcome } = await searchParams;
 
-  const [summary, org, recentPayments] = await Promise.all([
+  const [summary, org, recentPayments, unmatchedCount] = await Promise.all([
     getPortfolioSummary({ organizationId: ctx.organizationId }),
     db.organization.findUnique({
       where: { id: ctx.organizationId },
@@ -42,6 +43,7 @@ export default async function DashboardPage({
         status: true,
         method: true,
         source: true,
+        reconciliationStatus: true,
         paidAt: true,
         createdAt: true,
         lease: {
@@ -52,6 +54,9 @@ export default async function DashboardPage({
           },
         },
       },
+    }),
+    db.payment.count({
+      where: { organizationId: ctx.organizationId, reconciliationStatus: "UNMATCHED" },
     }),
   ]);
 
@@ -139,6 +144,21 @@ export default async function DashboardPage({
           </Banner>
         ) : null}
 
+        {unmatchedCount > 0 ? (
+          <Banner
+            tone="warning"
+            title={`${unmatchedCount} payment${unmatchedCount === 1 ? "" : "s"} couldn't be matched to a lease`}
+            action={
+              <Link href="/app/payments" className="btn-primary">
+                Review
+              </Link>
+            }
+          >
+            These came in from an import or manual entry but don&apos;t point at a tenant yet —
+            they aren&apos;t counted toward anyone&apos;s balance until you assign them.
+          </Banner>
+        ) : null}
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatTile
             label="Collected this month"
@@ -178,9 +198,14 @@ export default async function DashboardPage({
           description="Leases carrying a balance, largest first."
           padded={false}
           actions={
-            <Link href="/app/payments" className="text-xs font-medium text-brand-700 hover:underline">
-              All rent activity
-            </Link>
+            <>
+              <a href="/api/export/rent-roll" className="text-xs font-medium text-brand-700 hover:underline">
+                Export CSV
+              </a>
+              <Link href="/app/payments" className="text-xs font-medium text-brand-700 hover:underline">
+                All rent activity
+              </Link>
+            </>
           }
         >
           {behind.length === 0 ? (
@@ -268,7 +293,15 @@ export default async function DashboardPage({
             </Table>
           </Card>
 
-          <Card title="Recent payments" padded={false}>
+          <Card
+            title="Recent payments"
+            padded={false}
+            actions={
+              <a href="/api/export/payments" className="text-xs font-medium text-brand-700 hover:underline">
+                Export CSV
+              </a>
+            }
+          >
             {recentPayments.length === 0 ? (
               <EmptyState
                 title="No payments yet"
@@ -279,8 +312,11 @@ export default async function DashboardPage({
                 {recentPayments.map((p) => (
                   <li key={p.id} className="flex items-center justify-between gap-4 px-5 py-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">
+                      <p className="flex items-center gap-2 truncate text-sm font-medium text-slate-900">
                         {p.lease ? `${p.lease.tenant.firstName} ${p.lease.tenant.lastName}` : "Unmatched"}
+                        {p.reconciliationStatus !== "MATCHED" ? (
+                          <ReconciliationStatusBadge status={p.reconciliationStatus} />
+                        ) : null}
                       </p>
                       <p className="truncate text-xs text-slate-500">
                         {p.lease ? `${p.lease.unit.property.name} · ${p.lease.unit.label} · ` : ""}

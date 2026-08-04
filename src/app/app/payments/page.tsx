@@ -118,7 +118,15 @@ export default async function PaymentsPage() {
         ) : null}
 
         {unmatched.length > 0 ? (
-          <Card title="Unmatched payments" padded={false}>
+          <Card
+            title="Unmatched payments"
+            padded={false}
+            actions={
+              <a href="/api/export/payments?status=UNMATCHED" className="btn-secondary">
+                Export CSV
+              </a>
+            }
+          >
             <Table
               head={
                 <tr>
@@ -145,7 +153,15 @@ export default async function PaymentsPage() {
           </Card>
         ) : null}
 
-        <Card title="Outstanding balances" padded={false}>
+        <Card
+          title="Outstanding balances"
+          padded={false}
+          actions={
+            <a href="/api/export/rent-roll" className="btn-secondary">
+              Export CSV
+            </a>
+          }
+        >
           {behind.length === 0 ? (
             <EmptyState
               title="Everyone's paid up"
@@ -208,6 +224,11 @@ export default async function PaymentsPage() {
           title="Payment activity"
           description={payments.length === 100 ? "Most recent 100." : undefined}
           padded={false}
+          actions={
+            <a href="/api/export/payments" className="btn-secondary">
+              Export CSV
+            </a>
+          }
         >
           {payments.length === 0 ? (
             <EmptyState

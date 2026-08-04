@@ -132,11 +132,16 @@ export default async function LeaseDetailPage({
             description="What this lease has been billed."
             padded={false}
             actions={
-              <Disclosure label="Add charge">
-                <div className="w-full min-w-0">
-                  <AddChargeForm action={addChargeAction.bind(null, lease.id)} />
-                </div>
-              </Disclosure>
+              <>
+                <a href={`/api/export/charges?leaseId=${lease.id}`} className="btn-secondary">
+                  Export CSV
+                </a>
+                <Disclosure label="Add charge">
+                  <div className="w-full min-w-0">
+                    <AddChargeForm action={addChargeAction.bind(null, lease.id)} />
+                  </div>
+                </Disclosure>
+              </>
             }
           >
             {lease.charges.length === 0 ? (
@@ -183,17 +188,22 @@ export default async function LeaseDetailPage({
             description="Everything received against this lease."
             padded={false}
             actions={
-              <Disclosure label="Record payment">
-                <div className="w-full min-w-0">
-                  <RecordPaymentForm
-                    action={recordManualPaymentAction.bind(null, lease.id)}
-                    suggestedAmount={centsToInputValue(
-                      balance.balanceCents > 0 ? balance.balanceCents : lease.rentAmountCents,
-                    )}
-                    hasSubsidySplit={lease.subsidyOwedCents != null}
-                  />
-                </div>
-              </Disclosure>
+              <>
+                <a href={`/api/export/payments?leaseId=${lease.id}`} className="btn-secondary">
+                  Export CSV
+                </a>
+                <Disclosure label="Record payment">
+                  <div className="w-full min-w-0">
+                    <RecordPaymentForm
+                      action={recordManualPaymentAction.bind(null, lease.id)}
+                      suggestedAmount={centsToInputValue(
+                        balance.balanceCents > 0 ? balance.balanceCents : lease.rentAmountCents,
+                      )}
+                      hasSubsidySplit={lease.subsidyOwedCents != null}
+                    />
+                  </div>
+                </Disclosure>
+              </>
             }
           >
             {lease.payments.length === 0 ? (

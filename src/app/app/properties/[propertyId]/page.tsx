@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";
 import { createUnitAction } from "@/actions/units";
+import { createExpenseAction, deleteExpenseAction } from "@/actions/expenses";
 import { formatCents, formatCentsShort } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import {
@@ -18,6 +19,8 @@ import {
 } from "@/components/ui";
 import { Disclosure } from "@/components/disclosure";
 import { UnitForm } from "../_components/unit-form";
+import { ExpenseForm } from "./_components/expense-form";
+import { DeleteExpenseButton } from "./_components/delete-expense-button";
 
 export async function generateMetadata({
   params,
@@ -60,6 +63,12 @@ export default async function PropertyDetailPage({
 
   if (!property) notFound();
 
+  const expenses = await db.expense.findMany({
+    where: { propertyId: property.id },
+    orderBy: { date: "desc" },
+    take: 20,
+  });
+
   const occupied = property.units.filter((u) => u.status === "OCCUPIED").length;
   const scheduledRent = property.units.reduce(
     (sum, u) => sum + (u.leases[0]?.rentAmountCents ?? 0),
@@ -88,9 +97,14 @@ export default async function PropertyDetailPage({
           </>
         }
         actions={
-          <Link href={`/app/properties/${property.id}/edit`} className="btn-secondary">
-            Edit property
-          </Link>
+          <>
+            <Link href={`/app/reports/${property.id}`} className="btn-secondary">
+              P&amp;L report
+            </Link>
+            <Link href={`/app/properties/${property.id}/edit`} className="btn-secondary">
+              Edit property
+            </Link>
+          </>
         }
       />
 
@@ -218,6 +232,54 @@ export default async function PropertyDetailPage({
                   </tr>
                 );
               })}
+            </Table>
+          )}
+        </Card>
+
+        <Card
+          title="Expenses"
+          description="Repairs, utilities, insurance, and anything else against this property."
+          padded={false}
+          actions={
+            <>
+              <a href={`/api/export/property-pl?propertyId=${property.id}`} className="btn-secondary">
+                Export CSV
+              </a>
+              <Disclosure label="Add expense">
+                <div className="w-full min-w-0">
+                  <ExpenseForm action={createExpenseAction.bind(null, property.id)} />
+                </div>
+              </Disclosure>
+            </>
+          }
+        >
+          {expenses.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-slate-500">
+              No expenses logged yet. Add one, or track them here to see a full P&amp;L.
+            </p>
+          ) : (
+            <Table
+              head={
+                <tr>
+                  <th className="th">Date</th>
+                  <th className="th">Category</th>
+                  <th className="th">Description</th>
+                  <th className="th text-right">Amount</th>
+                  <th className="th"></th>
+                </tr>
+              }
+            >
+              {expenses.map((expense) => (
+                <tr key={expense.id} className="hover:bg-slate-50/60">
+                  <td className="td text-slate-500">{formatDate(expense.date)}</td>
+                  <td className="td">{expense.category.replace(/_/g, " ").toLowerCase()}</td>
+                  <td className="td">{expense.description}</td>
+                  <td className="td text-right tabular-nums">{formatCents(expense.amountCents)}</td>
+                  <td className="td text-right">
+                    <DeleteExpenseButton action={deleteExpenseAction.bind(null, expense.id)} />
+                  </td>
+                </tr>
+              ))}
             </Table>
           )}
         </Card>

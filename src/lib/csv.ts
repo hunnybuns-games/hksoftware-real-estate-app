@@ -93,3 +93,18 @@ export function toCsv<T>(rows: T[], columns: { header: string; value: (row: T) =
   // works everywhere else, so there's no real downside to being strict here.
   return [headerLine, ...lines].join("\r\n") + "\r\n";
 }
+
+/**
+ * Wraps a CSV string as a downloadable response. Every export route in the
+ * app returns through this, so the headers (and the "this is a file, not a
+ * page" behavior) are consistent everywhere.
+ */
+export function csvResponse(csv: string, filename: string): Response {
+  return new Response(csv, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename.replace(/"/g, "")}"`,
+      "Cache-Control": "private, no-store",
+    },
+  });
+}
