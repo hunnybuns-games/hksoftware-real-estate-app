@@ -22,15 +22,13 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      // Placeholder — run:
-      //   npx wrangler hyperdrive create hksoftware-real-estate-db \
-      //     --connection-string="<your production Postgres URL>"
-      // and paste the returned id here before deploying. Hyperdrive pools and
-      // caches the Postgres connection at Cloudflare's edge; the app talks to
-      // it exactly like Postgres (see src/lib/db.ts) via Prisma's `pg` driver
-      // adapter, which is required here regardless of Hyperdrive — Prisma's
-      // native query engine binary cannot run inside a Workers isolate.
-      "id": "0000000000000000000000000000000"
+      // hksoftware-real-estate-db, backed by Neon (Postgres 18). Hyperdrive
+      // pools and caches the connection at Cloudflare's edge; the app talks
+      // to it exactly like Postgres (see src/lib/db.ts) via Prisma's `pg`
+      // driver adapter, which is required here regardless of Hyperdrive —
+      // Prisma's native query engine binary cannot run inside a Workers
+      // isolate.
+      "id": "09e857fa6c6446cd84b0a3ef9081e742"
     }
   ],
   "vars": {
