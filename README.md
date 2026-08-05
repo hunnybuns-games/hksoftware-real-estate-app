@@ -1,5 +1,8 @@
 # HK Software Property Management
 
+See [`docs/MAINTAINER.md`](docs/MAINTAINER.md) for the full architecture, domain model,
+and maintainer runbook.
+
 ## Local development
 
 ```
