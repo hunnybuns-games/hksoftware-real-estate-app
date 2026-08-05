@@ -6,6 +6,13 @@
 
 generator client {
   provider = "prisma-client-js"
+  // No embedded engine binary/WASM at all — everything goes through the `pg`
+  // driver adapter (see src/lib/db.ts and prisma/seed.ts), so PrismaClient
+  // must always be constructed with an `adapter`. Without this, the default
+  // "library" engine bundles a ~2.2MB WASM query engine we never use, which
+  // is most of what pushed the Cloudflare Worker over the free plan's 3MB
+  // size limit.
+  engineType = "client"
 }
 
 datasource db {

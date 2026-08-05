@@ -6,9 +6,14 @@
  * Run with: npm run db:seed  (destructive — wipes the demo org first)
  */
 import { PrismaClient, type Prisma } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
-const db = new PrismaClient();
+// engineType = "client" in schema.prisma means there's no embedded engine to
+// fall back to — every PrismaClient, including this standalone seed script,
+// has to be constructed with an adapter.
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const db = new PrismaClient({ adapter });
 
 const PASSWORD = "demo-password-123";
 const ORG_NAME = "Cedar & Vine Property Group";
