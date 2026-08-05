@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hksoftware-real-estate-app",
+  // Points at our thin wrapper (src/worker/index.ts), not the OpenNext
+  // output directly — the wrapper adds the scheduled() handler for the
+  // daily rent run below. Everything else passes straight through to the
+  // generated Next.js worker. Run `npm run cf:build` before `wrangler deploy`
+  // so both this file and .open-next/worker.js exist.
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-08-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // Same job Vercel's cron used to hit over HTTP (see vercel.json in the
+  // pre-Cloudflare setup) — now a native Cron Trigger. Time is UTC; this
+  // matches vercel.json's "0 13 * * *".
+  "triggers": {
+    "crons": ["0 13 * * *"]
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      // Placeholder — run:
+      //   npx wrangler hyperdrive create hksoftware-real-estate-db \
+      //     --connection-string="<your production Postgres URL>"
+      // and paste the returned id here before deploying. Hyperdrive pools and
+      // caches the Postgres connection at Cloudflare's edge; the app talks to
+      // it exactly like Postgres (see src/lib/db.ts) via Prisma's `pg` driver
+      // adapter, which is required here regardless of Hyperdrive — Prisma's
+      // native query engine binary cannot run inside a Workers isolate.
+      "id": "0000000000000000000000000000000"
+    }
+  ],
+  "vars": {
+    // Tells src/lib/db.ts to resolve its connection string from the
+    // HYPERDRIVE binding above instead of DATABASE_URL. Not a secret — just
+    // a switch, so it's safe to keep in source. Left unset for local dev and
+    // for `prisma migrate`/`db seed`, which always talk to Postgres directly.
+    "USE_HYPERDRIVE": "true"
+  }
+  // Secrets (set with `npx wrangler secret put <NAME>`, never in this file):
+  //   AUTH_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, CRON_SECRET
+  // Non-secret vars you likely also want to add above once deployed:
+  //   AUTH_URL, APP_URL (your production origin), STRIPE_APPLICATION_FEE_BPS
+}

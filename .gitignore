@@ -12,3 +12,9 @@ next-env.d.ts
 .vercel
 tsconfig.tsbuildinfo
 coverage/
+
+# Cloudflare — build output and local wrangler state. wrangler.jsonc,
+# open-next.config.ts, cloudflare-env.d.ts, and src/worker/ are committed.
+.open-next/
+.wrangler/
+.dev.vars

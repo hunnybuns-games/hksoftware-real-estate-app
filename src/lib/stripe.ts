@@ -32,6 +32,11 @@ export function getStripe(): Stripe {
     // Bump this and the `stripe` dependency together, never separately.
     apiVersion: "2026-07-29.dahlia",
     appInfo: { name: "HK Software Property Management", version: "0.1.0" },
+    // Stripe's default HTTP client uses Node's `http` module, which doesn't
+    // exist inside a Cloudflare Workers isolate. The fetch-based client works
+    // identically there and on a normal Node server, so it's used everywhere
+    // rather than branching on runtime.
+    httpClient: Stripe.createFetchHttpClient(),
   });
   return client;
 }

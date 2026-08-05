@@ -1,0 +1,8 @@
+# Local secrets for `wrangler dev` / `npm run cf:preview` — copy to `.dev.vars`
+# (git-ignored) and fill in. Not used by plain `npm run dev`, which reads
+# from .env/.env.local instead; this file only matters when previewing
+# through Wrangler itself.
+AUTH_SECRET="dev-only-secret-change-me-1234567890abcdef"
+STRIPE_SECRET_KEY=""
+STRIPE_WEBHOOK_SECRET=""
+CRON_SECRET="dev-only-cron-secret"
