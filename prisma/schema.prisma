@@ -418,8 +418,8 @@ model PaymentImportBatch {
 
   // The parsed file, kept for the review screen and for audit ("view
   // original") after confirmation. Bank/Venmo/CashApp/HAP exports are small
-  // (hundreds of rows at most) so storing the text in Postgres is simple and
-  // avoids standing up object storage for what's fundamentally a rare,
+  // (hundreds of rows at most) so storing the text in the database is simple
+  // and avoids standing up object storage for what's fundamentally a rare,
   // small-file workflow — revisit if imports grow to needing streaming.
   rawCsv        String
   // { dateColumn, amountColumn, descriptionColumn, payerColumn, refColumn }
@@ -469,7 +469,7 @@ model MaintenanceRequest {
   @@index([unitId])
 }
 
-// Photos live in Postgres as bytes. This keeps the MVP deployable with nothing
+// Photos live in the database as bytes. This keeps the MVP deployable with nothing
 // but a database — no S3 bucket, no signed URLs, no extra vendor. Uploads are
 // capped (see src/lib/constants.ts); swap for object storage when volume grows.
 model MaintenancePhoto {

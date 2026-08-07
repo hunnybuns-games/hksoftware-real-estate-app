@@ -287,7 +287,7 @@ export async function addTenantCommentAction(
 
 /**
  * Reads and validates uploaded photos into rows ready for a nested create.
- * Photos go into Postgres as bytes — see the note on MaintenancePhoto in
+ * Photos go into the database as bytes — see the note on MaintenancePhoto in
  * schema.prisma for why, and when to move to object storage.
  */
 type PhotoRow = {

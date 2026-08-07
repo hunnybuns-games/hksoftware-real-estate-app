@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { canViewPhoto } from "@/actions/maintenance";
 
 /**
- * Serves a maintenance photo out of Postgres. Authorization runs on every
+ * Serves a maintenance photo out of the database. Authorization runs on every
  * request (canViewPhoto) — the id is a cuid, but an unguessable URL is not an
  * access control, and a former tenant must not keep reading photos.
  */

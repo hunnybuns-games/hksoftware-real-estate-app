@@ -134,7 +134,8 @@ export async function addChargeAction(
         dueDate: parsed.data.dueDate,
         description: parsed.data.description,
         // periodStart stays null for ad-hoc charges; only generated rent uses it
-        // as an idempotency key, and null values don't collide in Postgres.
+        // as an idempotency key, and null values never collide under a unique
+        // constraint (standard SQL semantics, true of SQLite same as Postgres).
         periodStart: null,
       },
     });

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { assertAdmin, assertStaff } from "@/lib/rbac";
+import { assertAdmin, assertStaff, AuthorizationError } from "@/lib/rbac";
 import {
   type ActionState,
   actionError,
@@ -57,6 +57,14 @@ export async function createOrganizationAction(
     const session = await auth();
     if (!session?.user?.id) return actionError("You need to sign in.");
     if (session.user.organizationId) return actionOk();
+    // organizationId: null should only ever happen to an ADMIN/STAFF account
+    // via a manual DB fix (see the comment above) — never to a TENANT or
+    // OWNER through any flow this app exposes. Guard it anyway: without this,
+    // a role that somehow reached this state could hand itself a fresh org
+    // and ADMIN on it.
+    if (session.user.role !== "ADMIN" && session.user.role !== "STAFF") {
+      throw new AuthorizationError();
+    }
 
     const parsed = parseForm(z.object({ name: nameField }), formData);
     if (!parsed.ok) return parsed.state;
