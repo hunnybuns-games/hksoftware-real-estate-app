@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { requireStaff } from "@/lib/rbac";
+import { requireStaff, staffOrganizationIdForMetadata } from "@/lib/rbac";
 import { getLeaseLedger } from "@/lib/ledger";
 import { getLeaseFormOptions } from "@/lib/lease-options";
 import { endLeaseAction, updateLeaseAction } from "@/actions/leases";
@@ -37,8 +37,13 @@ export async function generateMetadata({
   params: Promise<{ leaseId: string }>;
 }): Promise<Metadata> {
   const { leaseId } = await params;
-  const lease = await db.lease.findUnique({
-    where: { id: leaseId },
+  const organizationId = await staffOrganizationIdForMetadata();
+  if (!organizationId) return { title: "Lease" };
+
+  // Scoped the same way the page body is — a tenant's name from another org
+  // must not leak into this tab's title, even for a caller who's signed in.
+  const lease = await db.lease.findFirst({
+    where: { id: leaseId, organizationId },
     select: { tenant: { select: { firstName: true, lastName: true } } },
   });
   return {

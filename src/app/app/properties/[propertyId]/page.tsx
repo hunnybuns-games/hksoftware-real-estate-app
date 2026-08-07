@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { requireStaff } from "@/lib/rbac";
+import { requireStaff, staffOrganizationIdForMetadata } from "@/lib/rbac";
 import { createUnitAction } from "@/actions/units";
 import { createExpenseAction, deleteExpenseAction } from "@/actions/expenses";
 import { formatCents, formatCentsShort } from "@/lib/money";
@@ -28,8 +28,13 @@ export async function generateMetadata({
   params: Promise<{ propertyId: string }>;
 }): Promise<Metadata> {
   const { propertyId } = await params;
-  const property = await db.property.findUnique({
-    where: { id: propertyId },
+  const organizationId = await staffOrganizationIdForMetadata();
+  if (!organizationId) return { title: "Property" };
+
+  // Scoped the same way the page body is — an id from another org must not
+  // leak a name into this tab's title, even for a caller who's signed in.
+  const property = await db.property.findFirst({
+    where: { id: propertyId, organizationId },
     select: { name: true },
   });
   return { title: property?.name ?? "Property" };

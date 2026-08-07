@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { requireStaff } from "@/lib/rbac";
+import { requireStaff, staffOrganizationIdForMetadata } from "@/lib/rbac";
 import { updateRequestAction } from "@/actions/maintenance";
 import { formatDateTime } from "@/lib/dates";
 import {
@@ -22,8 +22,13 @@ export async function generateMetadata({
   params: Promise<{ requestId: string }>;
 }): Promise<Metadata> {
   const { requestId } = await params;
-  const request = await db.maintenanceRequest.findUnique({
-    where: { id: requestId },
+  const organizationId = await staffOrganizationIdForMetadata();
+  if (!organizationId) return { title: "Maintenance request" };
+
+  // Scoped the same way the page body is — a request title from another org
+  // must not leak into this tab's title, even for a caller who's signed in.
+  const request = await db.maintenanceRequest.findFirst({
+    where: { id: requestId, organizationId },
     select: { title: true },
   });
   return { title: request?.title ?? "Maintenance request" };

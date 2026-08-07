@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { requireStaff } from "@/lib/rbac";
+import { requireStaff, staffOrganizationIdForMetadata } from "@/lib/rbac";
 import {
   deleteTenantAction,
   inviteTenantAction,
@@ -21,8 +21,13 @@ export async function generateMetadata({
   params: Promise<{ tenantId: string }>;
 }): Promise<Metadata> {
   const { tenantId } = await params;
-  const tenant = await db.tenant.findUnique({
-    where: { id: tenantId },
+  const organizationId = await staffOrganizationIdForMetadata();
+  if (!organizationId) return { title: "Tenant" };
+
+  // Scoped the same way the page body is — a tenant's name from another org
+  // must not leak into this tab's title, even for a caller who's signed in.
+  const tenant = await db.tenant.findFirst({
+    where: { id: tenantId, organizationId },
     select: { firstName: true, lastName: true },
   });
   return { title: tenant ? `${tenant.firstName} ${tenant.lastName}` : "Tenant" };

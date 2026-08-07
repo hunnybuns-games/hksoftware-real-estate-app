@@ -30,3 +30,4 @@ prisma/dev.db-journal
 .e2e-run.mjs
 .e2e-reconciliation-run.mjs
 .e2e-reports-run.mjs
+.security-probe-run.mjs

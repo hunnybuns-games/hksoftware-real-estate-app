@@ -106,6 +106,24 @@ export class NotFoundError extends Error {
 }
 
 /**
+ * Staff org id for use inside `generateMetadata`. That function runs
+ * independently of the page body — its own `requireStaff()` redirect does
+ * not protect it — and metadata generation must never throw or redirect, so
+ * this returns null (rather than the guards above) on anything short of a
+ * signed-in ADMIN/STAFF with an organization. Callers fall back to a generic
+ * title when this is null, and must still scope their own lookup by the
+ * returned organizationId — this only tells you who's asking, not what
+ * they're allowed to see.
+ */
+export async function staffOrganizationIdForMetadata(): Promise<string | null> {
+  const session = await auth();
+  const user = session?.user;
+  if (!user?.id) return null;
+  if (user.role !== "ADMIN" && user.role !== "STAFF") return null;
+  return user.organizationId ?? null;
+}
+
+/**
  * Server-action equivalents of the guards above. Actions must not `redirect()`
  * on an authorization failure — they return a field error instead.
  */
