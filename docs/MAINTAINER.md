@@ -35,7 +35,7 @@ who's paid, who's short, and who's late. Maintenance requests, an owner portal, 
 exports for lenders/CPAs round it out.
 
 **Current state:** feature-complete for the scope above. Deployed target is Cloudflare
-Workers with a Neon Postgres database behind Cloudflare Hyperdrive — see [§11](#11-deploying-cloudflare-specifics).
+Workers with a native D1 (SQLite) database — see [§11](#11-deploying-cloudflare-specifics).
 
 ## 2. Architecture at a glance
 
@@ -46,20 +46,29 @@ browser
 Next.js 16 App Router  (Server Components, Server Actions, Route Handlers)
   │
   ├─ Auth.js v5          credentials login, JWT session, role + org on the token
-  ├─ Prisma 6 + pg driver adapter   never the native query-engine binary
+  ├─ Prisma 6 + driver adapter   never the native query-engine binary
   ├─ Stripe Connect       Express accounts, destination charges
   └─ RBAC guards          every query scoped by organizationId
   │
   ▼
-Postgres 18 (Neon) — behind Cloudflare Hyperdrive in production
+D1 (SQLite) — native Cloudflare Workers binding, no network hop
 ```
 
 Nothing here is exotic. The one deliberate architectural constraint, threaded through
 everything: **Prisma never uses its native query-engine binary** — it's configured with
-`engineType = "client"` and always constructed with `@prisma/adapter-pg`. That's not a
-style preference, it's load-bearing: the native engine can't run inside a Cloudflare
-Workers isolate at all, so the app would only run on Vercel/Node otherwise. See
-`src/lib/db.ts`.
+`engineType = "client"` and always constructed with an explicit adapter (`@prisma/adapter-d1`
+in production, `@prisma/adapter-better-sqlite3` everywhere else). That's not a style
+preference, it's load-bearing: the native engine can't run inside a Cloudflare Workers
+isolate at all, so the app would only run on Vercel/Node otherwise. See `src/lib/db.ts`.
+
+> **This app previously ran on Postgres (via Neon) behind Cloudflare Hyperdrive.** That
+> setup hit persistent, unresolved connection reliability issues in production — timeouts
+> that got worse, not better, as the pool/timeout configuration was tuned, eventually
+> traced to Hyperdrive itself failing to reliably reach the origin database. Rather than
+> keep chasing that, the database was switched to D1, which removes the failure mode
+> entirely: no external host, no pooling between two separate services, nothing to
+> misconfigure pooled-vs-direct. If you're reading old comments or commit history that
+> mention Postgres/Neon/Hyperdrive, that's why they're gone.
 
 Money is stored as integer cents everywhere, never floats — check any `amountCents`/
 `rentAmountCents` field. Dates that represent a calendar day (lease start/end, charge due
@@ -216,7 +225,7 @@ tables, the Rent page, the dashboard, and the owner dashboard all export through
 ## 8. Maintenance, notifications, cron
 
 Maintenance requests carry a status (`OPEN → IN_PROGRESS → RESOLVED`), priority, staff
-notes, and photos. **Photos are stored as blobs directly in Postgres**
+notes, and photos. **Photos are stored as blobs directly in the database**
 (`MaintenancePhoto.data`), not on disk or in object storage — a deliberate
 simplification that also happened to make the Cloudflare move easier, since there was no
 filesystem dependency to migrate. Every photo request re-checks authorization
@@ -233,7 +242,7 @@ Cron (`vercel.json`, no longer wired up but left in the repo).
 
 | Path | What's there |
 |---|---|
-| `prisma/schema.prisma` | The whole data model, 29 models/enums |
+| `prisma/schema.prisma` | The whole data model, 29 models/enums (SQLite dialect — see §11) |
 | `prisma/migrations/` | Hand-reviewed SQL migrations — see [§14](#14-maintainer-runbook) before writing one by hand |
 | `prisma/seed.ts` | Demo data generator — one realistic 34-unit portfolio |
 | `src/lib/` | Framework-free domain logic: `ledger.ts` (balance/lateness math), `reconciliation.ts`, `rent-split.ts`, `reports.ts`, `csv.ts`, `import-mapping.ts`, `lease-matching.ts`, `rbac.ts`, `db.ts`, `stripe.ts`, `auth.ts` |
@@ -249,29 +258,30 @@ Cron (`vercel.json`, no longer wired up but left in the repo).
 ## 10. Environments & configuration
 
 Local development never touches Cloudflare at all — `npm run dev` is plain `next dev`
-against whatever Postgres `DATABASE_URL` points to. That's a deliberate choice (see
+against a local SQLite file. That's a deliberate choice (see
 [§11](#11-deploying-cloudflare-specifics)), not an oversight: everyday development stays
-exactly as fast and simple as a normal Next.js app.
+exactly as fast and simple as a normal Next.js app, and there's no database server to
+start at all.
 
 | Name | Required | Where it's set |
 |---|---|---|
-| `DATABASE_URL` | Always | `.env` locally; not used in production (Hyperdrive takes over — see §11) |
+| `DATABASE_URL` | Always | `.env` locally (`file:./dev.db`, resolved relative to `prisma/` — see §14); not used in production (D1 takes over — see §11) |
 | `AUTH_SECRET` | Always | `.env` locally; `wrangler secret put` in production |
 | `AUTH_URL` / `APP_URL` | Always | `.env` locally; `wrangler.jsonc` `vars` in production (your real origin) |
 | `CRON_SECRET` | For the rent-run job | `wrangler secret put` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Only if using Stripe | `wrangler secret put` |
-| `USE_HYPERDRIVE` | Production only | `wrangler.jsonc` `vars` — not a secret, just a switch (see §11) |
+| `USE_D1` | Production only | `wrangler.jsonc` `vars` — not a secret, just a switch (see §11) |
 
 ## 11. Deploying (Cloudflare specifics)
 
 Production target is **Cloudflare Workers**, via the
 [OpenNext adapter](https://opennext.js.org/cloudflare) — the full App Router app (Server
-Actions included), not a static export. Database is **Postgres 18 on Neon**, reached
-through **Cloudflare Hyperdrive**, which pools/caches the connection at Cloudflare's edge
-instead of from inside the Worker isolate.
+Actions included), not a static export. Database is **D1** (Cloudflare's own SQLite),
+accessed through a native Workers binding (`env.DB`) — no connection string, no network
+hop, no connection pool to manage.
 
 ```
-wrangler.jsonc          Worker config: assets, Hyperdrive binding, cron trigger
+wrangler.jsonc          Worker config: assets, D1 binding, cron trigger
 open-next.config.ts     OpenNext build config (defaults — no extra cache bindings)
 src/worker/index.ts     Wraps the generated worker to add the cron scheduled() handler
 cloudflare-env.d.ts     Generated types for the Worker's env bindings — committed,
@@ -282,42 +292,38 @@ cloudflare-env.d.ts     Generated types for the Worker's env bindings — commit
 build-only, local workerd preview, and build-then-deploy.
 
 > **Gotcha — Prisma's native engine can't run in a Worker at all.** `engineType =
-> "client"` in `schema.prisma`, plus `@prisma/adapter-pg` everywhere a `PrismaClient`
-> gets constructed (`src/lib/db.ts` and `prisma/seed.ts` both). This isn't optional under
-> this setup — without an adapter, construction throws, because there's no embedded
-> engine to fall back to. It also happens to be why the native query-engine binary
-> (17MB, dead weight) is gone from the deployed bundle.
+> "client"` in `schema.prisma`, plus an explicit adapter everywhere a `PrismaClient` gets
+> constructed (`src/lib/db.ts` and `prisma/seed.ts` both — `@prisma/adapter-d1` in
+> production, `@prisma/adapter-better-sqlite3` locally). This isn't optional under this
+> setup — without an adapter, construction throws, because there's no embedded engine to
+> fall back to.
 
-> **Gotcha — pg-cloudflare's real file goes missing from the bundle.** `pg`'s
-> Cloudflare-specific socket implementation (`pg-cloudflare`) is resolved differently by
-> Next's build-time file tracer (plain Node conditions → the empty stub) than by
-> OpenNext's Workers bundler (the `workerd` condition → the real implementation) — so
-> without intervention, the build silently ships a stub and fails at bundle time with
-> `Could not resolve "pg-cloudflare"`. Fixed via `outputFileTracingIncludes` in
-> `next.config.ts`, forcing the tracer to carry the real files along regardless of which
-> condition it resolved.
+> **Gotcha — `@prisma/client`'s bare import resolves to the wrong runtime on Workers.**
+> Its default export goes through a conditional exports map keyed on platform ("node" vs
+> "workerd" vs "edge-light", ...), and that resolution has picked the Node-oriented
+> runtime on Cloudflare before — which tries to read the WASM query compiler off a real
+> filesystem, and Workers has none. The fix isn't a build flag: `src/lib/db.ts` imports
+> *both* `@prisma/client` and `@prisma/client/wasm.js` explicitly and picks between them
+> at runtime with the `USE_D1` signal, rather than trusting the package's own platform
+> detection. Neither variant works on both platforms in this toolchain — each is only
+> correct on the one it was built for.
 
-> **Gotcha — the free plan's 3 MiB Worker size limit.** Even with the native engine
-> gone, Prisma still needs its WASM query *compiler* (~1.9MB) to turn queries into SQL,
-> and that's before Auth.js, Stripe, and the app's own code. The measured deployed
-> bundle is comfortably under 10MB but over the free tier's 3MB. **This app requires the
-> Workers Paid plan ($5/month)** — not a bug to keep chasing, a real requirement of
-> running a full Next.js app with Prisma on Workers at all.
-
-> **Gotcha — Hyperdrive needs a local-connection-string build var.**
-> `opennextjs-cloudflare deploy` resolves the Hyperdrive binding locally as part of
-> packaging even in CI, which needs a real reachable Postgres string. Set
-> `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` as a **build environment
-> variable** (Cloudflare dashboard → Settings → Environment variables for the build,
-> distinct from the Worker's own runtime secrets) to your real Postgres connection
-> string.
+> **Gotcha — the Prisma CLI and this app's own runtime resolve a relative sqlite `file:`
+> path differently.** The CLI (`prisma migrate`/`db seed`) resolves it against
+> `prisma/schema.prisma`'s own directory; `better-sqlite3` (what the app's runtime client
+> actually uses) resolves it against the process's cwd, like any normal Node file access.
+> Left alone, `prisma migrate dev` and the app end up silently pointed at two different
+> files. `src/lib/db.ts` and `prisma/seed.ts` both replicate the CLI's resolution rule
+> explicitly (`localSqliteUrl()`) so they always agree.
 
 **Prefer not to deal with any of this?** The app runs as a completely ordinary Next.js
 server with none of the above — `npm run build && npm run start` against any reachable
-`DATABASE_URL`, no OpenNext/Hyperdrive/wrangler involved at all. The repo also still has
-a `vercel.json` from before this Cloudflare work — Vercel hosts Next.js natively with no
-bundle-size fight. Worth considering if "Cloudflare specifically" isn't a hard
-requirement.
+`DATABASE_URL`, no OpenNext/wrangler involved at all (you'd need to point `DATABASE_URL`
+at a real database again in that case, since a plain Node server can't reach a D1
+binding — see the retired Postgres+Hyperdrive setup in git history if you want that
+path back). The repo also still has a `vercel.json` from before this Cloudflare work —
+Vercel hosts Next.js natively with no bundle-size fight. Worth considering if "Cloudflare
+specifically" isn't a hard requirement.
 
 ## 12. Testing
 
@@ -338,17 +344,19 @@ Three scripts, not checked into the repo as of this report — they were written
 from the build session's scratchpad and are worth committing to `e2e/` or similar if you
 want them to survive. Covers: the original MVP flows (auth, properties, leases, Stripe
 simulation, maintenance — 48 checks), the reconciliation/import flows (16 checks), and
-the reporting/export flows (19 checks). Run against a seeded local Postgres with `npm run
-dev` already running.
+the reporting/export flows (19 checks). Run against a seeded local SQLite database (`npm
+run db:migrate && npm run db:seed`) with `npm run dev` already running.
 
 ## 13. Known gaps & deliberate non-goals
 
-- **No R2/KV/D1 cache bindings.** Next's cache falls back to in-isolate memory. Fine for
+- **No R2/KV cache bindings.** Next's cache falls back to in-isolate memory. Fine for
   this app's traffic; revisit only if ISR/full-route caching across isolates becomes
   worth the extra binding.
-- **D1 was considered and rejected** for the primary database — see §11. Postgres
-  semantics matter for the reconciliation engine's correctness, and D1/SQLite would have
-  meant re-verifying all of it.
+- **Postgres (Neon) + Hyperdrive was tried first and abandoned** — see §2 and §11. The
+  reconciliation engine doesn't lean on any Postgres-only semantics (confirmed before the
+  switch: no raw SQL, no Postgres-native column types), so moving to D1/SQLite didn't
+  require re-verifying its correctness — only re-running the existing test suites, which
+  passed unchanged.
 - **`docs/payments.md` is referenced but doesn't exist.** A comment in
   `src/lib/stripe.ts` points to it ("see docs/payments.md") from early in the project;
   the file was never actually written. Worth creating or removing the reference.
@@ -383,12 +391,17 @@ git push origin claude/property-management-mvp-gjlizb
 
 ### Run migrations against production
 
-From a machine with real internet access:
+D1 doesn't take `prisma migrate deploy` — there's no connection string to point it at.
+Apply the generated SQL directly with Wrangler instead:
 
 ```
-$env:DATABASE_URL="<production connection string>"
-npx prisma migrate deploy
+npx wrangler d1 execute hksoftware-real-estate-db --remote \
+  --file=./prisma/migrations/<latest migration folder>/migration.sql
 ```
+
+Requires Cloudflare auth (`npx wrangler login`, or `CLOUDFLARE_API_TOKEN`). Review the
+SQL first — same caveat as local migrations: data backfills for existing rows aren't
+automatic.
 
 ### Add a new secret
 

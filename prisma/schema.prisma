@@ -6,17 +6,23 @@
 
 generator client {
   provider = "prisma-client-js"
-  // No embedded engine binary/WASM at all — everything goes through the `pg`
-  // driver adapter (see src/lib/db.ts and prisma/seed.ts), so PrismaClient
-  // must always be constructed with an `adapter`. Without this, the default
-  // "library" engine bundles a ~2.2MB WASM query engine we never use, which
-  // is most of what pushed the Cloudflare Worker over the free plan's 3MB
-  // size limit.
+  // No embedded engine binary/WASM at all — everything goes through a driver
+  // adapter (see src/lib/db.ts and prisma/seed.ts: @prisma/adapter-d1 in
+  // production, @prisma/adapter-better-sqlite3 locally), so PrismaClient must
+  // always be constructed with an `adapter`. Without this, the default
+  // "library" engine bundles a ~2.2MB WASM query engine we never use.
   engineType = "client"
 }
 
+// SQLite dialect — this is what Cloudflare D1 actually is under the hood.
+// Production runs on a real D1 binding (no connection string, no network hop
+// to manage, no connection pool to go stale — see docs/MAINTAINER.md for why
+// this replaced an external Postgres+Hyperdrive setup). `url` here is only
+// used by the Prisma CLI (migrate/studio) against a local file; the app
+// itself always goes through an explicit adapter at runtime, which ignores
+// this value entirely — same pattern as before, just a different file.
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 

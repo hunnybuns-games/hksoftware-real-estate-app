@@ -5,14 +5,30 @@
  *
  * Run with: npm run db:seed  (destructive — wipes the demo org first)
  */
+import path from "node:path";
 import { PrismaClient, type Prisma } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaBetterSQLite3 } from "@prisma/adapter-better-sqlite3";
 import bcrypt from "bcryptjs";
+
+// The Prisma CLI resolves a relative sqlite `file:` URL against
+// prisma/schema.prisma's own directory, not the process's cwd — but
+// better-sqlite3 resolves it against cwd, same as any normal Node file
+// access. Matching the CLI's own resolution here (see src/lib/db.ts, which
+// does the same thing) is what keeps `prisma migrate` and this script
+// pointed at the same file.
+function localSqliteUrl(): string {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) throw new Error("DATABASE_URL is not set.");
+  const relative = raw.replace(/^file:/, "");
+  return path.isAbsolute(relative) ? raw : `file:${path.join(process.cwd(), "prisma", relative)}`;
+}
 
 // engineType = "client" in schema.prisma means there's no embedded engine to
 // fall back to — every PrismaClient, including this standalone seed script,
-// has to be constructed with an adapter.
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+// has to be constructed with an adapter. This script only ever runs locally
+// (via tsx), so it always talks to the local SQLite file, same as
+// src/lib/db.ts does outside of a deployed Worker.
+const adapter = new PrismaBetterSQLite3({ url: localSqliteUrl() });
 const db = new PrismaClient({ adapter });
 
 const PASSWORD = "demo-password-123";

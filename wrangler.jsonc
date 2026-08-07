@@ -19,24 +19,26 @@
   "triggers": {
     "crons": ["0 13 * * *"]
   },
-  "hyperdrive": [
+  "d1_databases": [
     {
-      "binding": "HYPERDRIVE",
-      // hksoftware-real-estate-db, backed by Neon (Postgres 18). Hyperdrive
-      // pools and caches the connection at Cloudflare's edge; the app talks
-      // to it exactly like Postgres (see src/lib/db.ts) via Prisma's `pg`
-      // driver adapter, which is required here regardless of Hyperdrive —
-      // Prisma's native query engine binary cannot run inside a Workers
-      // isolate.
-      "id": "09e857fa6c6446cd84b0a3ef9081e742"
+      "binding": "DB",
+      "database_name": "hksoftware-real-estate-db",
+      // Placeholder — run:
+      //   npx wrangler d1 create hksoftware-real-estate-db
+      // and paste the returned database_id here before deploying. D1 is a
+      // native Workers binding (see src/lib/db.ts) — no connection string,
+      // no network hop, no connection pool to manage or go stale. This
+      // replaced an external Postgres+Hyperdrive setup; see
+      // docs/MAINTAINER.md for why.
+      "database_id": "00000000-0000-0000-0000-000000000000"
     }
   ],
   "vars": {
-    // Tells src/lib/db.ts to resolve its connection string from the
-    // HYPERDRIVE binding above instead of DATABASE_URL. Not a secret — just
-    // a switch, so it's safe to keep in source. Left unset for local dev and
-    // for `prisma migrate`/`db seed`, which always talk to Postgres directly.
-    "USE_HYPERDRIVE": "true"
+    // Tells src/lib/db.ts to use the D1 binding above instead of a local
+    // SQLite file. Not a secret — just a switch, so it's safe to keep in
+    // source. Left unset for local dev and for `prisma migrate`/`db seed`,
+    // which always talk to a local SQLite file directly.
+    "USE_D1": "true"
   }
   // Secrets (set with `npx wrangler secret put <NAME>`, never in this file):
   //   AUTH_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, CRON_SECRET

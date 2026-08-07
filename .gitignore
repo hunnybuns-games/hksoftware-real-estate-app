@@ -18,3 +18,8 @@ coverage/
 .open-next/
 .wrangler/
 .dev.vars
+
+# Local SQLite dev database (D1's dialect) — created by `prisma migrate dev`
+# / `db seed`, never committed.
+prisma/dev.db
+prisma/dev.db-journal

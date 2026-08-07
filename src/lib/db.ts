@@ -1,106 +1,77 @@
 // Two imports, deliberately, not one. @prisma/client's default export is
 // resolved through a conditional exports map keyed on platform ("node" vs
-// "workerd" vs "edge-light", ...), and on Cloudflare that resolution picked
-// the Node-oriented runtime — which tries to read query_compiler_bg.wasm off
-// a real filesystem and crashes on the very first query ("no such file or
-// directory, readAll ..."), because Workers has no filesystem at all.
-// "./wasm.js" is built for exactly that situation, but it turns out to *not*
-// work under plain Node/tsx in this toolchain (dynamic `import()` of the
-// .wasm file resolves to something Prisma doesn't recognize) — so neither
-// variant works everywhere; each is only correct on the platform it was
-// built for. Import both, pick the right one at runtime with the same
-// USE_HYPERDRIVE signal that already distinguishes Workers from everywhere
-// else (see resolveConnectionString below).
+// "workerd" vs "edge-light", ...), and on Cloudflare that resolution has
+// picked the Node-oriented runtime before — which tries to read the WASM
+// query compiler off a real filesystem, and Workers has none. "./wasm.js" is
+// built for exactly that situation, but it doesn't work under plain
+// Node/tsx in this toolchain either — so neither variant works everywhere;
+// each is only correct on the platform it was built for. Import both, pick
+// the right one at runtime with the same USE_D1 signal that already
+// distinguishes Workers from everywhere else (see createClient below).
+import path from "node:path";
 import { PrismaClient as PrismaClientNode } from "@prisma/client";
 import { PrismaClient as PrismaClientWasm } from "@prisma/client/wasm.js";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaD1 } from "@prisma/adapter-d1";
+import { PrismaBetterSQLite3 } from "@prisma/adapter-better-sqlite3";
 
-const PrismaClient = process.env.USE_HYPERDRIVE === "true" ? PrismaClientWasm : PrismaClientNode;
 type PrismaClient = InstanceType<typeof PrismaClientNode>;
 
 /**
- * Connection string resolution:
- *  - Locally, in tests, and from the Prisma CLI (migrate/seed) — DATABASE_URL,
- *    a direct Postgres connection string.
- *  - Deployed to Cloudflare Workers — routed through Hyperdrive, which pools
- *    and caches connections at Cloudflare's edge instead of from inside the
- *    Worker isolate. wrangler.jsonc sets USE_HYPERDRIVE only there.
- *
- * Either way Prisma talks to Postgres through the `pg` driver adapter, not
- * its native query-engine binary — that binary can't run inside a Workers
- * isolate at all, Hyperdrive or not.
+ * The Prisma CLI resolves a relative sqlite `file:` URL against
+ * prisma/schema.prisma's own directory, not the process's cwd — but
+ * better-sqlite3 (what this file hands the path to) resolves it against
+ * cwd, same as any normal Node file access. Left alone, `prisma migrate`/
+ * `db seed` and this app's own runtime client silently end up pointing at
+ * two different files. Resolving it the same way the CLI does, here, is
+ * what keeps them in agreement.
  */
-function resolveConnectionString(): string {
-  if (process.env.USE_HYPERDRIVE === "true") {
-    // getCloudflareContext() only resolves inside an active request on
-    // Cloudflare Workers, which is exactly why this whole client has to be
-    // built lazily (see the Proxy below) instead of at module-evaluation time.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getCloudflareContext } = require("@opennextjs/cloudflare") as typeof import("@opennextjs/cloudflare");
-    // env's HYPERDRIVE field comes from the global CloudflareEnv augmentation
-    // in cloudflare-env.d.ts, generated to match wrangler.jsonc's binding.
-    const { env } = getCloudflareContext();
-    return env.HYPERDRIVE.connectionString;
-  }
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set.");
-  return url;
+function localSqliteUrl(): string {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) throw new Error("DATABASE_URL is not set.");
+  const relative = raw.replace(/^file:/, "");
+  if (path.isAbsolute(relative)) return raw;
+  return `file:${path.join(process.cwd(), "prisma", relative)}`;
 }
 
+/**
+ * D1 is SQLite — this app talks to it through Prisma's driver-adapter
+ * mechanism, same idea as the Postgres setup this replaced, but D1 itself
+ * removes the whole class of problems that setup had: no connection string,
+ * no network hop to manage, no pool that can go stale while idle, nothing to
+ * misconfigure pooled-vs-direct. `env.DB` is a native Workers binding,
+ * colocated with the Worker (see docs/MAINTAINER.md for the full story).
+ *
+ * Locally, in tests, and from the Prisma CLI (migrate/seed) — a plain local
+ * SQLite file via @prisma/adapter-better-sqlite3, no server process at all.
+ */
 function createClient(): PrismaClient {
-  const adapter = new PrismaPg({
-    connectionString: resolveConnectionString(),
-    // node-postgres has NO timeouts at all by default. Two distinct failure
-    // modes need covering, not just one:
-    //  - a stalled *connect* attempt (connectionTimeoutMillis — the first
-    //    thing tried here, and not enough on its own, see below)
-    //  - a query sent on a connection that was already open but went
-    //    silently dead — e.g. Hyperdrive closed it while idle, which this
-    //    isolate has no way to know about until it tries to use it.
-    //    connectionTimeoutMillis does NOT cover this: that timeout only
-    //    applies to establishing a new connection, not to a query on one
-    //    already established. query_timeout is what actually bounds this.
-    // Without both, a bad connection hangs until the Workers runtime itself
-    // kills the request with no error our own code ever sees or reports.
-    // keepAlive makes the OS itself notice a dead peer via TCP probes,
-    // rather than relying purely on timing out.
-    //
-    // idleTimeoutMillis is deliberately short (not the usual 10s+ default):
-    // Hyperdrive appears to close connections that sat idle for a while
-    // before this pool's own idle timer would ever notice, so a request
-    // that reuses one finds it already dead. Recycling connections on our
-    // side well before Hyperdrive would on its own is what actually avoids
-    // that — reconnecting is cheap, since Hyperdrive keeps the *expensive*
-    // long-lived connection to Postgres itself; what we open is just a
-    // lightweight hop to Hyperdrive's edge, not a fresh trip to the origin
-    // database. `max` is kept small for the same reason: this pool only
-    // needs to cover concurrent requests within one isolate, not hold many
-    // connections open — Hyperdrive is where the real pooling happens.
-    max: 3,
-    connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 3_000,
-    query_timeout: 10_000,
-    statement_timeout: 10_000,
-    keepAlive: true,
-  });
-  return new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
-  });
+  if (process.env.USE_D1 === "true") {
+    // getCloudflareContext() only resolves inside an active request on
+    // Cloudflare Workers, which is exactly why this whole client has to be
+    // built lazily (see the Proxy below) instead of at module-evaluation
+    // time. env.DB's type comes from the global CloudflareEnv augmentation
+    // in cloudflare-env.d.ts, generated to match wrangler.jsonc's binding.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getCloudflareContext } = require("@opennextjs/cloudflare") as typeof import("@opennextjs/cloudflare");
+    const { env } = getCloudflareContext();
+    return new PrismaClientWasm({ adapter: new PrismaD1(env.DB) });
+  }
+
+  return new PrismaClientNode({ adapter: new PrismaBetterSQLite3({ url: localSqliteUrl() }) });
 }
 
 // Cached at module scope so a warm Next.js dev reload (or a Cloudflare Worker
-// isolate handling many requests) reuses one pool instead of leaking a new
-// one per edit/request until Postgres refuses connections.
+// isolate handling many requests) reuses one client instead of leaking a new
+// one per edit/request.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 /**
- * A Proxy rather than a plain client: on Cloudflare, resolveConnectionString()
- * can only run inside a request (Hyperdrive's binding isn't available at
- * module-evaluation time, i.e. Worker cold start), so the real PrismaClient
- * has to be constructed lazily on first use rather than eagerly here. Every
- * call site keeps using `db.lease.findMany(...)` etc. exactly as before —
- * only this file changed.
+ * A Proxy rather than a plain client: on Cloudflare, the D1 binding isn't
+ * available at module-evaluation time (Worker cold start) — only once a
+ * request is actually in flight — so the real PrismaClient has to be
+ * constructed lazily on first use rather than eagerly here. Every call site
+ * keeps using `db.lease.findMany(...)` etc. exactly as before — only this
+ * file changed.
  */
 export const db: PrismaClient = new Proxy({} as PrismaClient, {
   get(_target, prop, receiver) {
