@@ -1,5 +1,22 @@
-import { PrismaClient } from "@prisma/client";
+// Two imports, deliberately, not one. @prisma/client's default export is
+// resolved through a conditional exports map keyed on platform ("node" vs
+// "workerd" vs "edge-light", ...), and on Cloudflare that resolution picked
+// the Node-oriented runtime — which tries to read query_compiler_bg.wasm off
+// a real filesystem and crashes on the very first query ("no such file or
+// directory, readAll ..."), because Workers has no filesystem at all.
+// "./wasm.js" is built for exactly that situation, but it turns out to *not*
+// work under plain Node/tsx in this toolchain (dynamic `import()` of the
+// .wasm file resolves to something Prisma doesn't recognize) — so neither
+// variant works everywhere; each is only correct on the platform it was
+// built for. Import both, pick the right one at runtime with the same
+// USE_HYPERDRIVE signal that already distinguishes Workers from everywhere
+// else (see resolveConnectionString below).
+import { PrismaClient as PrismaClientNode } from "@prisma/client";
+import { PrismaClient as PrismaClientWasm } from "@prisma/client/wasm.js";
 import { PrismaPg } from "@prisma/adapter-pg";
+
+const PrismaClient = process.env.USE_HYPERDRIVE === "true" ? PrismaClientWasm : PrismaClientNode;
+type PrismaClient = InstanceType<typeof PrismaClientNode>;
 
 /**
  * Connection string resolution:
