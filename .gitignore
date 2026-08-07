@@ -23,3 +23,10 @@ coverage/
 # / `db seed`, never committed.
 prisma/dev.db
 prisma/dev.db-journal
+
+# Working copies of the Playwright e2e scripts (see docs/MAINTAINER.md §12) —
+# intentionally not checked in yet; canonical copies live in the build
+# session's scratchpad.
+.e2e-run.mjs
+.e2e-reconciliation-run.mjs
+.e2e-reports-run.mjs
