@@ -48,7 +48,21 @@ function resolveConnectionString(): string {
 }
 
 function createClient(): PrismaClient {
-  const adapter = new PrismaPg({ connectionString: resolveConnectionString() });
+  const adapter = new PrismaPg({
+    connectionString: resolveConnectionString(),
+    // node-postgres has NO connection timeout by default — a stalled connect
+    // attempt (or a pooled connection Hyperdrive silently closed while idle,
+    // which this isolate has no way to know about until it tries to use it)
+    // would otherwise hang until the Workers runtime itself kills the request
+    // ~30s later with no error our code ever sees, let alone reports. Failing
+    // fast here means a bad connection surfaces as a normal, retryable error
+    // instead of a silent hang. `max` is kept small — Hyperdrive already
+    // pools at Cloudflare's edge, so this pool only needs to cover concurrent
+    // requests within one isolate, not hold many connections open itself.
+    max: 5,
+    connectionTimeoutMillis: 8_000,
+    idleTimeoutMillis: 10_000,
+  });
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
