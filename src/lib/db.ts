@@ -50,18 +50,29 @@ function resolveConnectionString(): string {
 function createClient(): PrismaClient {
   const adapter = new PrismaPg({
     connectionString: resolveConnectionString(),
-    // node-postgres has NO connection timeout by default — a stalled connect
-    // attempt (or a pooled connection Hyperdrive silently closed while idle,
-    // which this isolate has no way to know about until it tries to use it)
-    // would otherwise hang until the Workers runtime itself kills the request
-    // ~30s later with no error our code ever sees, let alone reports. Failing
-    // fast here means a bad connection surfaces as a normal, retryable error
-    // instead of a silent hang. `max` is kept small — Hyperdrive already
-    // pools at Cloudflare's edge, so this pool only needs to cover concurrent
-    // requests within one isolate, not hold many connections open itself.
+    // node-postgres has NO timeouts at all by default. Two distinct failure
+    // modes need covering, not just one:
+    //  - a stalled *connect* attempt (connectionTimeoutMillis — the first
+    //    thing tried here, and not enough on its own, see below)
+    //  - a query sent on a connection that was already open but went
+    //    silently dead — e.g. Hyperdrive closed it while idle, which this
+    //    isolate has no way to know about until it tries to use it.
+    //    connectionTimeoutMillis does NOT cover this: that timeout only
+    //    applies to establishing a new connection, not to a query on one
+    //    already established. query_timeout is what actually bounds this.
+    // Without both, a bad connection hangs until the Workers runtime itself
+    // kills the request with no error our own code ever sees or reports.
+    // keepAlive makes the OS itself notice a dead peer via TCP probes,
+    // rather than relying purely on timing out. `max` is kept small —
+    // Hyperdrive already pools at Cloudflare's edge, so this pool only
+    // needs to cover concurrent requests within one isolate, not hold many
+    // connections open itself.
     max: 5,
     connectionTimeoutMillis: 8_000,
     idleTimeoutMillis: 10_000,
+    query_timeout: 8_000,
+    statement_timeout: 8_000,
+    keepAlive: true,
   });
   return new PrismaClient({
     adapter,
