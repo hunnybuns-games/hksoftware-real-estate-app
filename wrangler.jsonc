@@ -23,14 +23,14 @@
     {
       "binding": "DB",
       "database_name": "hksoftware-real-estate-db",
-      // Placeholder — run:
-      //   npx wrangler d1 create hksoftware-real-estate-db
-      // and paste the returned database_id here before deploying. D1 is a
-      // native Workers binding (see src/lib/db.ts) — no connection string,
-      // no network hop, no connection pool to manage or go stale. This
-      // replaced an external Postgres+Hyperdrive setup; see
-      // docs/MAINTAINER.md for why.
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      // D1 is a native Workers binding (see src/lib/db.ts) — no connection
+      // string, no network hop, no connection pool to manage or go stale.
+      // This replaced an external Postgres+Hyperdrive setup; see
+      // docs/MAINTAINER.md for why. The schema still needs to be applied to
+      // this database (see docs/MAINTAINER.md §11/§14 — `wrangler d1
+      // execute --remote --file=...`) before the app can actually run
+      // against it.
+      "database_id": "7b7e8815-d2f6-4de9-8948-b840936fadc4"
     }
   ],
   "vars": {
