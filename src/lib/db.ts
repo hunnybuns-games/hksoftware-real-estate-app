@@ -63,15 +63,24 @@ function createClient(): PrismaClient {
     // Without both, a bad connection hangs until the Workers runtime itself
     // kills the request with no error our own code ever sees or reports.
     // keepAlive makes the OS itself notice a dead peer via TCP probes,
-    // rather than relying purely on timing out. `max` is kept small —
-    // Hyperdrive already pools at Cloudflare's edge, so this pool only
+    // rather than relying purely on timing out.
+    //
+    // idleTimeoutMillis is deliberately short (not the usual 10s+ default):
+    // Hyperdrive appears to close connections that sat idle for a while
+    // before this pool's own idle timer would ever notice, so a request
+    // that reuses one finds it already dead. Recycling connections on our
+    // side well before Hyperdrive would on its own is what actually avoids
+    // that — reconnecting is cheap, since Hyperdrive keeps the *expensive*
+    // long-lived connection to Postgres itself; what we open is just a
+    // lightweight hop to Hyperdrive's edge, not a fresh trip to the origin
+    // database. `max` is kept small for the same reason: this pool only
     // needs to cover concurrent requests within one isolate, not hold many
-    // connections open itself.
-    max: 5,
-    connectionTimeoutMillis: 8_000,
-    idleTimeoutMillis: 10_000,
-    query_timeout: 8_000,
-    statement_timeout: 8_000,
+    // connections open — Hyperdrive is where the real pooling happens.
+    max: 3,
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 3_000,
+    query_timeout: 10_000,
+    statement_timeout: 10_000,
     keepAlive: true,
   });
   return new PrismaClient({
