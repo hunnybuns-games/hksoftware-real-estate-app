@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";
 import { refreshStripeStatusAction, startStripeOnboardingAction } from "@/actions/org";
+import { disconnectBankAction } from "@/actions/bank-connection";
 import { stripeEnabled } from "@/lib/stripe";
+import { plaidEnabled } from "@/lib/plaid";
 import { Badge, Banner, Card, DescriptionList } from "@/components/ui";
 import { ActionButton } from "@/components/action-button";
+import { BankConnectButton } from "./_components/bank-connect-button";
 
 export const metadata: Metadata = { title: "Rent collection" };
 
@@ -16,14 +19,24 @@ export default async function PaymentSettingsPage({
   const ctx = await requireStaff();
   const { connected } = await searchParams;
 
-  const org = await db.organization.findUnique({
-    where: { id: ctx.organizationId },
-    select: {
-      stripeAccountId: true,
-      stripeChargesEnabled: true,
-      stripePayoutsEnabled: true,
-    },
-  });
+  const [org, bankConnection] = await Promise.all([
+    db.organization.findUnique({
+      where: { id: ctx.organizationId },
+      select: {
+        stripeAccountId: true,
+        stripeChargesEnabled: true,
+        stripePayoutsEnabled: true,
+      },
+    }),
+    db.bankConnection.findUnique({
+      where: { organizationId: ctx.organizationId },
+      select: {
+        institutionName: true,
+        status: true,
+        lastSyncedAt: true,
+      },
+    }),
+  ]);
   if (!org) return null;
 
   const isAdmin = ctx.role === "ADMIN";
@@ -119,6 +132,86 @@ export default async function PaymentSettingsPage({
                 />
               ) : null}
             </div>
+          )}
+        </div>
+      </Card>
+
+      <Card title="Bank feed">
+        <div className="space-y-5">
+          <p className="text-sm leading-relaxed text-slate-600">
+            Connect the bank account you receive rent into, and payments that show up there —
+            checks you&apos;ve deposited, Venmo/Cash App cash-outs, direct deposits — get pulled in
+            automatically and matched against leases, the same way an imported statement is. This
+            is separate from Stripe above: Stripe collects payments <em>from</em> tenants; this
+            reads what&apos;s already landed in your account from anywhere.
+          </p>
+
+          {!plaidEnabled ? (
+            <Banner tone="warning" title="Not configured on this deployment">
+              Set <code className="rounded bg-white/60 px-1">PLAID_CLIENT_ID</code>,{" "}
+              <code className="rounded bg-white/60 px-1">PLAID_SECRET</code>, and{" "}
+              <code className="rounded bg-white/60 px-1">BANK_TOKEN_ENCRYPTION_KEY</code> to enable
+              this. Until then, Venmo/Cash App/bank statements can still be uploaded by hand under{" "}
+              <strong>Payments → Import</strong>.
+            </Banner>
+          ) : (
+            <>
+              <DescriptionList
+                items={[
+                  {
+                    label: "Connection",
+                    value: bankConnection ? (
+                      <span className="flex flex-wrap items-center gap-2">
+                        {bankConnection.status === "ACTIVE" ? (
+                          <Badge tone="green">Connected</Badge>
+                        ) : bankConnection.status === "LOGIN_REQUIRED" ? (
+                          <Badge tone="amber">Needs reconnecting</Badge>
+                        ) : (
+                          <Badge tone="slate">Disconnected</Badge>
+                        )}
+                        {bankConnection.institutionName ? (
+                          <span className="text-slate-600">{bankConnection.institutionName}</span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      <Badge tone="slate">Not connected</Badge>
+                    ),
+                  },
+                  ...(bankConnection?.lastSyncedAt
+                    ? [
+                        {
+                          label: "Last synced",
+                          value: bankConnection.lastSyncedAt.toLocaleString(),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+
+              {!isAdmin ? (
+                <p className="text-sm text-slate-500">Only an admin can connect or change this.</p>
+              ) : (
+                <div className="flex flex-wrap items-start gap-3">
+                  <BankConnectButton
+                    label={
+                      bankConnection?.status === "LOGIN_REQUIRED"
+                        ? "Reconnect bank"
+                        : bankConnection
+                          ? "Connect a different bank"
+                          : "Connect bank"
+                    }
+                  />
+                  {bankConnection ? (
+                    <ActionButton
+                      action={disconnectBankAction}
+                      label="Disconnect"
+                      pendingLabel="Disconnecting…"
+                      variant="danger"
+                    />
+                  ) : null}
+                </div>
+              )}
+            </>
           )}
         </div>
       </Card>
