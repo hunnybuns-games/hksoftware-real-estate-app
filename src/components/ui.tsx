@@ -1,6 +1,7 @@
 import Link from "next/link";
 import clsx from "clsx";
 import type { ReactNode } from "react";
+import type { PaymentSource } from "@prisma/client";
 
 export function PageHeader({
   title,
@@ -137,11 +138,7 @@ export function PaymentStatusBadge({
   return <Badge tone={tone}>{label}</Badge>;
 }
 
-export function PaymentSourceBadge({
-  source,
-}: {
-  source: "MANUAL_CASH" | "IMPORT_BANK" | "IMPORT_VENMO" | "IMPORT_CASHAPP" | "IMPORT_HAP" | "STRIPE_NATIVE";
-}) {
+export function PaymentSourceBadge({ source }: { source: PaymentSource }) {
   const map = {
     MANUAL_CASH: { tone: "slate", label: "Cash / check" },
     IMPORT_BANK: { tone: "neutral", label: "Bank transfer" },
@@ -149,7 +146,8 @@ export function PaymentSourceBadge({
     IMPORT_CASHAPP: { tone: "blue", label: "Cash App" },
     IMPORT_HAP: { tone: "green", label: "HAP" },
     STRIPE_NATIVE: { tone: "blue", label: "Online" },
-  } as const;
+    IMPORT_PLAID: { tone: "green", label: "Bank feed" },
+  } as const satisfies Record<PaymentSource, { tone: BadgeTone; label: string }>;
   const { tone, label } = map[source];
   return <Badge tone={tone}>{label}</Badge>;
 }

@@ -75,11 +75,15 @@ enum PaymentMethod {
 // (ACH vs card) that only ever applies to STRIPE_NATIVE payments now.
 enum PaymentSource {
   MANUAL_CASH // cash, check, or anything hand-recorded with no statement to import
-  IMPORT_BANK // bank/ACH statement CSV
+  IMPORT_BANK // bank/ACH statement CSV, uploaded by hand
   IMPORT_VENMO
   IMPORT_CASHAPP
   IMPORT_HAP // housing authority / Section 8 subsidy payment report
   STRIPE_NATIVE // collected in-app via Stripe Connect
+  IMPORT_PLAID // pulled automatically from a connected bank via Plaid — kept
+  // distinct from IMPORT_BANK because match confidence differs: a bank's own
+  // transaction descriptor rarely carries a tenant's name the way a manually
+  // exported statement row does (see src/lib/lease-matching.ts).
 }
 
 // Set by the reconciliation engine only — never directly editable in a form.
@@ -164,6 +168,50 @@ model Organization {
   payments            Payment[]
   importBatches       PaymentImportBatch[]
   expenses            Expense[]
+  bankConnection      BankConnection?
+}
+
+/**
+ * One connected receiving bank account per organization, via Plaid. Mirrors
+ * how Stripe Connect works on Organization above — one external financial
+ * account, admin-managed — but this one is read-only (Plaid's Transactions
+ * product, not a payment rail) and its credential is materially more
+ * sensitive: `accessTokenEncrypted` grants ongoing read access to the org's
+ * actual bank transaction history for as long as the connection stays
+ * active, not a single charge. Never store it unencrypted — see
+ * src/lib/plaid.ts for the encrypt/decrypt helpers and src/lib/db.ts's
+ * neighboring comments for why nothing here can assume a live network
+ * connection at module-evaluation time.
+ */
+model BankConnection {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  plaidItemId           String @unique
+  accessTokenEncrypted  String
+
+  institutionName String?
+  institutionLogo String? // Plaid returns this as a base64 data URI; small enough to inline
+
+  // Cursor for /transactions/sync — Plaid's own pagination token, not ours.
+  // Null until the first sync completes.
+  cursor String?
+
+  status       BankConnectionStatus @default(ACTIVE)
+  lastSyncedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+enum BankConnectionStatus {
+  ACTIVE
+  LOGIN_REQUIRED // Plaid's ITEM_LOGIN_REQUIRED webhook — the owner needs to
+  // re-authenticate with their bank through Link before syncing can resume.
+  REVOKED // owner disconnected, or Plaid reported the Item as permanently gone
 }
 
 model User {

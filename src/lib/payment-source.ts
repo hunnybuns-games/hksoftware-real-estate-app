@@ -12,6 +12,7 @@ export const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
   IMPORT_CASHAPP: "Cash App",
   IMPORT_HAP: "Housing authority (HAP)",
   STRIPE_NATIVE: "Online (Stripe)",
+  IMPORT_PLAID: "Bank feed",
 };
 
 /** Short form for tight table cells / CSV columns. */
@@ -22,6 +23,7 @@ export const PAYMENT_SOURCE_SHORT_LABELS: Record<PaymentSource, string> = {
   IMPORT_CASHAPP: "Cash App",
   IMPORT_HAP: "HAP",
   STRIPE_NATIVE: "Stripe",
+  IMPORT_PLAID: "Bank feed",
 };
 
 export function paymentSourceLabel(source: PaymentSource): string {
