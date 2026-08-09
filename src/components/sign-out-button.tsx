@@ -1,4 +1,3 @@
-import clsx from "clsx";
 import { signOutAction } from "@/app/(auth)/actions";
 
 export function SignOutButton({ className }: { className?: string }) {

@@ -9,7 +9,7 @@ import { applyColumnMapping, type ColumnMapping } from "@/lib/import-mapping";
 import { suggestLeaseMatch } from "@/lib/lease-matching";
 import { formatDate } from "@/lib/dates";
 import { PAYMENT_SOURCE_LABELS } from "@/lib/payment-source";
-import { Badge, Banner, Breadcrumbs, Card, PageHeader } from "@/components/ui";
+import { Banner, Breadcrumbs, Card, PageHeader } from "@/components/ui";
 import { MappingForm } from "./_components/mapping-form";
 import { ConfirmImportForm } from "./_components/confirm-import-form";
 

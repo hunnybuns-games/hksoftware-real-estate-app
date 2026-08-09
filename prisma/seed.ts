@@ -19,8 +19,32 @@ import bcrypt from "bcryptjs";
 function localSqliteUrl(): string {
   const raw = process.env.DATABASE_URL;
   if (!raw) throw new Error("DATABASE_URL is not set.");
+  assertLocalTarget(raw);
   const relative = raw.replace(/^file:/, "");
   return path.isAbsolute(relative) ? raw : `file:${path.join(process.cwd(), "prisma", relative)}`;
+}
+
+/**
+ * This script is destructive — it deletes the demo organization and everything
+ * cascading from it. Production is D1, reached through a Workers binding with
+ * no connection string at all, so a correct invocation can only ever be a
+ * local `file:` URL. Anything else means DATABASE_URL has been pointed
+ * somewhere it shouldn't be, and the right move is to refuse rather than to
+ * start deleting and find out.
+ *
+ * Cheap insurance against the worst possible afternoon: the only thing that
+ * stopped an accidental reset during the build session was Prisma's own
+ * interactive guardrail, which won't be there when this runs from a script.
+ */
+function assertLocalTarget(url: string): void {
+  if (!url.startsWith("file:")) {
+    throw new Error(
+      `Refusing to seed: DATABASE_URL is not a local sqlite file (got "${url.split(":")[0]}:…").\n` +
+        "This script wipes and rebuilds the demo organization and must only ever run " +
+        "against a local development database. Production data lives in Cloudflare D1 " +
+        "and is reached through the DB binding, never through DATABASE_URL.",
+    );
+  }
 }
 
 // engineType = "client" in schema.prisma means there's no embedded engine to

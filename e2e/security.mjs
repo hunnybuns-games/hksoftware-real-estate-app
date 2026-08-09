@@ -119,7 +119,7 @@ log(
 // Role boundary: a freshly signed-up ADMIN tries the tenant portal and owner dashboard directly.
 const rPortal = await pageA.goto(`${BASE}/portal`);
 log("admin visiting /portal is redirected away, not shown tenant data", pageA.url() !== `${BASE}/portal` || (rPortal?.status() ?? 200) >= 300, pageA.url());
-const rOwner = await pageA.goto(`${BASE}/owner`);
+await pageA.goto(`${BASE}/owner`);
 log("admin visiting /owner is redirected away", pageA.url() !== `${BASE}/owner`, pageA.url());
 
 // Open-redirect probe on login's redirectTo.

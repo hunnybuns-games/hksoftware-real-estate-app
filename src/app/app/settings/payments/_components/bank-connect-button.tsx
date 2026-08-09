@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePlaidLink } from "react-plaid-link";
 import { createBankLinkTokenAction, exchangeBankPublicTokenAction } from "@/actions/bank-connection";
 
@@ -15,8 +15,16 @@ import { createBankLinkTokenAction, exchangeBankPublicTokenAction } from "@/acti
  */
 export function BankConnectButton({ label = "Connect bank" }: { label?: string }) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "starting" | "exchanging" | "error">("idle");
+  const [phase, setPhase] = useState<"idle" | "opening" | "exchanging">("idle");
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Link should open exactly once per token we fetch. A ref rather than state
+   * because nothing renders from it — and because checking it inside the effect
+   * below is what lets that effect avoid calling setState purely to stop itself
+   * re-firing, which is the cascading-render pattern React warns about.
+   */
+  const openedRef = useRef(false);
 
   const { open, ready } = usePlaidLink({
     token: linkToken,
@@ -26,11 +34,11 @@ export function BankConnectButton({ label = "Connect bank" }: { label?: string }
       // without a real token. Guard anyway rather than pass null onward.
       if (!publicToken) return;
 
-      setStatus("exchanging");
+      setPhase("exchanging");
       exchangeBankPublicTokenAction(publicToken)
         .then((result) => {
           if (!result?.ok) {
-            setStatus("error");
+            setPhase("idle");
             setError(result?.error ?? "Something went wrong finishing the connection.");
             return;
           }
@@ -40,40 +48,54 @@ export function BankConnectButton({ label = "Connect bank" }: { label?: string }
           window.location.reload();
         })
         .catch(() => {
-          setStatus("error");
+          setPhase("idle");
           setError("Something went wrong finishing the connection. Please try again.");
         });
     },
+
+    /**
+     * Backing out of Link without connecting is an ordinary thing to do, not an
+     * error — reset so the button is usable again and a second attempt fetches
+     * a fresh token. The functional update guards the case where onExit arrives
+     * after a successful link (Plaid shouldn't fire both, but if it does, a
+     * half-finished exchange must not be reset out from under itself).
+     */
+    onExit: () => {
+      setPhase((current) => (current === "exchanging" ? current : "idle"));
+      openedRef.current = false;
+      setLinkToken(null);
+    },
   });
 
-  // usePlaidLink only reports ready once it has a token and has finished
-  // loading Plaid's script — open it the moment that happens instead of
-  // requiring the owner to click twice.
+  // Open Link the moment it reports ready, so connecting is one click rather
+  // than two. The ref guard above — not a setState — is what keeps this from
+  // firing repeatedly as `ready` and `open` change identity across renders.
   useEffect(() => {
-    if (ready && status === "starting") {
-      setStatus("idle");
-      open();
-    }
-  }, [ready, status, open]);
+    if (phase !== "opening" || !ready || openedRef.current) return;
+    openedRef.current = true;
+    open();
+  }, [phase, ready, open]);
 
   async function startConnect() {
-    setStatus("starting");
+    setPhase("opening");
     setError(null);
+    openedRef.current = false;
+
     const result = await createBankLinkTokenAction();
     if (!result.ok) {
-      setStatus("error");
+      setPhase("idle");
       setError(result.error);
       return;
     }
     setLinkToken(result.linkToken);
   }
 
-  const busy = status === "starting" || status === "exchanging";
+  const busy = phase !== "idle";
 
   return (
     <div className="space-y-2">
       <button type="button" onClick={startConnect} disabled={busy} className="btn-primary">
-        {status === "exchanging" ? "Connecting…" : busy ? "Opening…" : label}
+        {phase === "exchanging" ? "Connecting…" : phase === "opening" ? "Opening…" : label}
       </button>
       {error ? <p className="field-error">{error}</p> : null}
     </div>

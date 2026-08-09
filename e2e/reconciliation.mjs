@@ -50,7 +50,6 @@ log("dashboard still shows Needs attention section", /Needs attention/.test(dash
 await page.goto(`${BASE}/app/leases`, { waitUntil: "networkidle" });
 await page.locator("main table tbody tr").first().locator("a").first().click();
 await page.waitForURL(/\/app\/leases\/[a-z0-9]+$/, { timeout: 15000 });
-const leaseUrl = page.url();
 
 await page.locator("summary", { hasText: "Record payment" }).first().click();
 await page.waitForTimeout(300);
