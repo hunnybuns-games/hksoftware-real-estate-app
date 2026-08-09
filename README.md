@@ -19,7 +19,10 @@ No local database server to start — `DATABASE_URL` points at a local SQLite fi
 Required env vars (`.env`/`.env.local`): `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`,
 `APP_URL`. Optional: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
 `STRIPE_APPLICATION_FEE_BPS`, `CRON_SECRET` (needed once you wire up the rent-run
-cron somewhere — see below).
+cron somewhere — see below), `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`
+(`sandbox` or `production`, defaults to `sandbox`), `BANK_TOKEN_ENCRYPTION_KEY`
+(`openssl rand -base64 32` — encrypts a connected bank's access token at rest;
+see docs/MAINTAINER.md for the owner bank-feed feature this powers).
 
 ```
 npm run typecheck
@@ -54,14 +57,21 @@ pool to manage. See `src/lib/db.ts` for how that's wired.
 3. **Secrets** (never committed — set once per environment):
    ```
    npx wrangler secret put AUTH_SECRET
-   npx wrangler secret put STRIPE_SECRET_KEY        # optional, if using Stripe
-   npx wrangler secret put STRIPE_WEBHOOK_SECRET     # optional
+   npx wrangler secret put STRIPE_SECRET_KEY            # optional, if using Stripe
+   npx wrangler secret put STRIPE_WEBHOOK_SECRET        # optional
    npx wrangler secret put CRON_SECRET
+   npx wrangler secret put PLAID_CLIENT_ID              # optional, if using the owner bank feed
+   npx wrangler secret put PLAID_SECRET                 # optional
+   npx wrangler secret put BANK_TOKEN_ENCRYPTION_KEY    # required alongside the two above
    ```
 
 4. **Vars.** `wrangler.jsonc` already sets `USE_D1=true` (that's what tells
    `src/lib/db.ts` to use the D1 binding instead of a local SQLite file). Once you have a
-   real domain, also add `AUTH_URL` / `APP_URL` under `vars`.
+   real domain, also add `AUTH_URL` / `APP_URL` under `vars`. If you're using the Plaid
+   bank feed, add `PLAID_ENV="production"` under `vars` once you're off Sandbox (defaults
+   to `sandbox` if unset), and register a webhook endpoint in the Plaid dashboard pointed
+   at `https://<your-domain>/api/plaid/webhook` subscribed to Item and Transactions
+   events.
 
 ### Build & deploy
 

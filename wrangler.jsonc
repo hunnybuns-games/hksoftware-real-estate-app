@@ -41,7 +41,9 @@
     "USE_D1": "true"
   }
   // Secrets (set with `npx wrangler secret put <NAME>`, never in this file):
-  //   AUTH_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, CRON_SECRET
+  //   AUTH_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, CRON_SECRET,
+  //   PLAID_CLIENT_ID, PLAID_SECRET, BANK_TOKEN_ENCRYPTION_KEY
   // Non-secret vars you likely also want to add above once deployed:
-  //   AUTH_URL, APP_URL (your production origin), STRIPE_APPLICATION_FEE_BPS
+  //   AUTH_URL, APP_URL (your production origin), STRIPE_APPLICATION_FEE_BPS,
+  //   PLAID_ENV ("production" once you're off Sandbox — defaults to "sandbox")
 }

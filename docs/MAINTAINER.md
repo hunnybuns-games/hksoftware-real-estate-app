@@ -142,6 +142,7 @@ payment source among several, not the assumed default. Every `Payment` row carri
 | `import_venmo` | CSV import — Venmo export |
 | `import_cashapp` | CSV import — Cash App export |
 | `import_hap` | CSV import — housing-authority payment report |
+| `import_plaid` | Owner's connected bank feed, synced automatically — see below |
 
 ### Manual entry & CSV import
 
@@ -170,6 +171,61 @@ account — funds settle directly into the landlord's Stripe balance, Stripe han
 KYC/payouts, and the platform never takes custody of rent money. See
 `src/lib/stripe.ts`. Stripe is fully optional — with no `STRIPE_SECRET_KEY` set, the app
 works end-to-end and the tenant portal just says online payment isn't enabled yet.
+
+Stripe and the bank feed below solve different problems and are both optional
+independently of each other: Stripe collects rent **from** a tenant; the bank feed reads
+what's already landed in the owner's account **from anywhere** (a deposited check, a
+Venmo/Cash App cash-out, a subsidy direct deposit) without anyone re-typing it.
+
+### Plaid bank feed (owner's receiving account)
+
+An org's admin connects the bank account they receive rent into (org settings → Rent
+collection → Bank feed), via [Plaid](https://plaid.com/docs/transactions/) Transactions —
+read-only, revocable, no bank credentials ever touch this app's servers. From then on,
+new transactions sync automatically and get turned into `Payment` rows the same way a CSV
+import row does.
+
+- **`src/lib/plaid.ts`** — thin wrapper matching `stripe.ts`'s shape (`plaidEnabled` gate,
+  lazy client, `createLinkToken`/`exchangePublicToken`/`syncTransactions`/etc.). Plaid's
+  Node SDK builds its calls on axios, whose default adapter reaches for `node:http` —
+  same problem Stripe's SDK had — fixed the same way, with axios's fetch adapter.
+  Normalizes Plaid's inverted amount sign (positive = money **out**) to this app's
+  convention (positive = money **in**) in one place.
+- **`src/lib/token-encryption.ts`** — AES-256-GCM via the Web Crypto API. The stored
+  access token (`BankConnection.accessTokenEncrypted`) grants ongoing read access to the
+  org's real bank transactions for as long as the connection stays active, not a
+  single charge — meaningfully more sensitive than anything else this app stores, so
+  it's encrypted at rest with its own key (`BANK_TOKEN_ENCRYPTION_KEY`), separate from
+  `AUTH_SECRET`.
+- **`src/actions/bank-connection.ts`** + **`.../settings/payments/_components/bank-connect-button.tsx`**
+  — connect/disconnect. Unlike Stripe Connect's redirect-based onboarding, Plaid Link is
+  a client-side widget the browser has to drive directly (`react-plaid-link`), so this is
+  the one payment-integration flow in the app that isn't a plain `<form action>`.
+- **`src/lib/plaid-sync.ts`** — `syncBankConnection()` does the actual work: pulls new
+  transactions since the connection's last cursor, decides what to do with each one (skip
+  debits/zero-amounts/already-synced, match against a lease via the same
+  `suggestLeaseMatch()` CSV import uses, create/update/delete the corresponding
+  `Payment`), then recomputes reconciliation for every lease touched. The decision logic
+  (`decideAddedTransaction`, `decideModifiedTransaction`) is split out as pure functions
+  from the DB-touching orchestration — same split as `computeReconciliation` /
+  `applyReconciliation` — specifically so it's unit-testable without a database.
+- **`src/lib/plaid-webhook.ts`** + **`src/app/api/plaid/webhook/route.ts`** — Plaid signs
+  webhooks with a rotating-key JWT (ES256), not a static secret like Stripe's, so
+  verification means fetching Plaid's JWK by the JWT's `kid`, checking the signature,
+  checking `iat` freshness, and checking the JWT's body-hash claim against the actual
+  raw request body — implemented directly against Web Crypto rather than a JWT library.
+  `SYNC_UPDATES_AVAILABLE` triggers a sync; `ITEM_LOGIN_REQUIRED` flips the connection to
+  needing reconnect (a bank forcing periodic re-auth is normal, expected behavior, not an
+  error state to alarm anyone over).
+
+**A gap worth knowing about:** this feature was built and unit-tested (matching/filtering
+logic, and the webhook's cryptographic verification — both with real, non-mocked
+crypto/logic, just no live network) without ever completing a live connect-and-sync
+against Plaid's actual Sandbox — the build session's sandbox blocked outbound access to
+Plaid's API and CDN hosts entirely. Everything that could be verified without a live
+Plaid connection was; the actual "click Connect, log into Plaid's fake Sandbox bank, see
+a transaction land on the Rent page" walkthrough still needs to happen once, by a human,
+somewhere with real internet access, before trusting this in production.
 
 ## 6. The reconciliation engine
 
@@ -245,15 +301,16 @@ Cron (`vercel.json`, no longer wired up but left in the repo).
 | `prisma/schema.prisma` | The whole data model, 29 models/enums (SQLite dialect — see §11) |
 | `prisma/migrations/` | Hand-reviewed SQL migrations — see [§14](#14-maintainer-runbook) before writing one by hand |
 | `prisma/seed.ts` | Demo data generator — one realistic 34-unit portfolio |
-| `src/lib/` | Framework-free domain logic: `ledger.ts` (balance/lateness math), `reconciliation.ts`, `rent-split.ts`, `reports.ts`, `csv.ts`, `import-mapping.ts`, `lease-matching.ts`, `rbac.ts`, `db.ts`, `stripe.ts`, `auth.ts` |
-| `src/actions/` | Server Actions, one file per domain area (leases, payments, tenants, properties, maintenance, import, expenses, team, org) |
+| `src/lib/` | Framework-free domain logic: `ledger.ts` (balance/lateness math), `reconciliation.ts`, `rent-split.ts`, `reports.ts`, `csv.ts`, `import-mapping.ts`, `lease-matching.ts`, `rbac.ts`, `db.ts`, `stripe.ts`, `plaid.ts`, `plaid-sync.ts`, `plaid-webhook.ts`, `token-encryption.ts`, `auth.ts` |
+| `src/actions/` | Server Actions, one file per domain area (leases, payments, tenants, properties, maintenance, import, expenses, team, org, bank-connection) |
 | `src/app/app/` | Staff-facing app (`requireStaff`-gated): dashboard, properties, leases, payments/import, reports, maintenance, tenants, settings |
 | `src/app/owner/` | Owner portal (`requireOwner`-gated): financials-only dashboard + statements |
 | `src/app/portal/` | Tenant portal (`requireTenant`-gated): lease, payments, maintenance |
 | `src/app/api/export/` | CSV export Route Handlers: rent-roll, property-pl, payments, charges |
 | `src/app/api/cron/rent-run/` | The daily job (§8) |
+| `src/app/api/stripe/webhook/`, `src/app/api/plaid/webhook/` | Payment-provider webhook Route Handlers |
 | `src/worker/index.ts` | Cloudflare Worker wrapper — adds the cron `scheduled()` handler around the generated OpenNext worker |
-| `src/lib/__tests__/` | vitest unit tests — csv, import, ledger, reconciliation |
+| `src/lib/__tests__/` | vitest unit tests — csv, import, ledger, reconciliation, plaid-sync, plaid-webhook |
 
 ## 10. Environments & configuration
 
@@ -270,6 +327,9 @@ start at all.
 | `AUTH_URL` / `APP_URL` | Always | `.env` locally; `wrangler.jsonc` `vars` in production (your real origin) |
 | `CRON_SECRET` | For the rent-run job | `wrangler secret put` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Only if using Stripe | `wrangler secret put` |
+| `PLAID_CLIENT_ID` / `PLAID_SECRET` | Only if using the bank feed | `wrangler secret put` |
+| `PLAID_ENV` | Only if using the bank feed | `.env` locally / `wrangler.jsonc` `vars` — `sandbox` (default) or `production`, not a secret |
+| `BANK_TOKEN_ENCRYPTION_KEY` | Required alongside the two Plaid secrets | `wrangler secret put` — `openssl rand -base64 32` |
 | `USE_D1` | Production only | `wrangler.jsonc` `vars` — not a secret, just a switch (see §11) |
 
 ## 11. Deploying (Cloudflare specifics)
@@ -337,6 +397,13 @@ or reconciliation — not just before a release.
   §6, hand-traced
 - `import.test.ts` — column-mapping guesses, bad-row detection, lease matching
 - `csv.test.ts` — the parser/writer itself
+- `plaid-sync.test.ts` — the pure decision functions behind the bank feed (§5): deposit
+  filtering, unambiguous vs. no match, idempotency, and the modified/removed transitions
+  (including the "don't silently override a human's lease correction" case)
+- `plaid-webhook.test.ts` — real ES256 sign/verify through the actual Web Crypto API this
+  app uses in production (only the network call to fetch Plaid's public key is mocked):
+  accepts a correctly signed fresh webhook, rejects a missing header, a malformed JWT, a
+  tampered body, a forged signature, a stale `iat`, and an unexpected algorithm
 
 ### End-to-end (Playwright)
 
@@ -363,6 +430,19 @@ run db:migrate && npm run db:seed`) with `npm run dev` already running.
 - **No custom domain configured** — production currently lives at the default
   `*.workers.dev` URL.
 - **Stripe is optional**, by design, not an oversight — see §5.
+- **The Plaid bank feed (§5) has never completed a live Sandbox connect-and-sync.** It was
+  built and unit-tested with real logic/crypto but no live network access to Plaid at all
+  (the build session's network policy blocked Plaid's API and CDN hosts outright). Do the
+  actual Link-connect-sync walkthrough by hand once, somewhere with real internet access,
+  before trusting this with anyone's real bank account.
+- **No rate limiting on login/signup.** Flagged during a security review; bcrypt's cost
+  factor slows brute-forcing somewhat but there's no lockout. Best fixed at the Cloudflare
+  edge (a Rate Limiting rule, or the Workers-native `ratelimit` binding, GA since September
+  2025) rather than in application code — see the review notes in git history around
+  where this was found for the fuller writeup.
+- **No security headers beyond the three baseline ones in `next.config.ts`** (nosniff,
+  frame-deny, referrer-policy). No CSP — one worth having needs to be built against this
+  app's actual script/style/connect sources and verified page by page, not guessed at.
 
 ## 14. Maintainer runbook
 
