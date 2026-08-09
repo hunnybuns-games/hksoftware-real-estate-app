@@ -24,9 +24,12 @@ coverage/
 prisma/dev.db
 prisma/dev.db-journal
 
-# Working copies of the Playwright e2e scripts (see docs/MAINTAINER.md §12) —
-# intentionally not checked in yet; canonical copies live in the build
-# session's scratchpad.
+# Screenshots and scratch files the e2e suites write while running — debugging
+# aids for whoever is watching a failure, not fixtures anything asserts against.
+e2e/.artifacts/
+
+# Superseded local copies of the e2e scripts — the real ones now live in e2e/.
+# Kept ignored so an older checkout doesn't suddenly start tracking them.
 .e2e-run.mjs
 .e2e-reconciliation-run.mjs
 .e2e-reports-run.mjs
