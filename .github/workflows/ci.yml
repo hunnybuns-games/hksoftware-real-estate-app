@@ -1,0 +1,108 @@
+name: CI
+
+# Runs on every push and pull request. Cloudflare Workers Builds deploys
+# straight off a branch push with no gate in front of it, so this is the only
+# thing standing between a broken commit and production.
+on:
+  push:
+  pull_request:
+
+# A new push to the same branch makes the previous run's result irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast feedback: everything that needs neither a browser nor a database.
+  check:
+    name: Typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # engineType = "client" means there's no bundled engine — the generated
+      # client has to exist before tsc or vitest can resolve @prisma/client.
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+      # The real production build path, not just `next build` — this is what
+      # catches things that only break once OpenNext bundles for workerd
+      # (a Node-only API reaching into a Worker isolate, most often).
+      # Verified to need no .env: nothing at build time reads DATABASE_URL.
+      - name: Cloudflare production build
+        run: npm run cf:build
+
+  # Slower: needs a browser, a migrated+seeded database, and a running server.
+  e2e:
+    name: End-to-end suites
+    runs-on: ubuntu-latest
+    env:
+      # Dev-only values. The app refuses to start without these, and none of
+      # them are secrets — AUTH_SECRET here signs throwaway CI sessions only.
+      DATABASE_URL: "file:./dev.db"
+      AUTH_SECRET: "ci-only-secret-not-used-anywhere-real-0000"
+      AUTH_URL: "http://localhost:3000"
+      APP_URL: "http://localhost:3000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # The suites are not hermetic — they read and write the same local
+      # database the dev server uses, and assume the demo portfolio exists.
+      # See e2e/README.md.
+      - name: Migrate and seed
+        run: |
+          npx prisma migrate deploy
+          npx prisma db seed
+
+      - name: Start dev server
+        run: npm run dev &
+
+      # Poll rather than sleep a fixed amount: cold Next startup varies enough
+      # that any single sleep is either flaky or wasteful.
+      - name: Wait for the server
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null http://localhost:3000/login; then
+              echo "up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "dev server never came up"
+          exit 1
+
+      - run: npm run e2e:mvp
+      - run: npm run e2e:reconciliation
+      - run: npm run e2e:reports
+      - run: npm run e2e:security
+
+      # Screenshots from the failing run are the fastest way to see what a
+      # browser check actually hit.
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: e2e/.artifacts/
+          if-no-files-found: ignore
