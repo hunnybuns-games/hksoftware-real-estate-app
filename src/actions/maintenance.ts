@@ -18,6 +18,7 @@ import {
   MAX_PHOTO_BYTES,
 } from "@/lib/constants";
 import { notifyMaintenanceCreated, notifyMaintenanceUpdated } from "@/lib/notifications";
+import { detectImageType } from "@/lib/image-signature";
 import { auth } from "@/lib/auth";
 
 const requestSchema = z.object({
@@ -327,6 +328,8 @@ async function readPhotos(
         }),
       };
     }
+    // Size before reading the body, so an oversized upload is rejected without
+    // being pulled into memory first.
     if (file.size > MAX_PHOTO_BYTES) {
       return {
         ok: false,
@@ -335,13 +338,29 @@ async function readPhotos(
         }),
       };
     }
+
+    // Uint8Array (not Buffer) — Prisma's Bytes input requires an
+    // ArrayBuffer-backed view, and Buffer.from widens to ArrayBufferLike.
+    const data = new Uint8Array(await file.arrayBuffer());
+
+    // The declared file.type checked above is attacker-controlled; this is what
+    // the bytes actually are. Store and later serve the detected type, never
+    // the claimed one — see src/lib/image-signature.ts.
+    const detected = detectImageType(data);
+    if (!detected) {
+      return {
+        ok: false,
+        state: actionError("Please fix the highlighted fields.", {
+          photos: `“${file.name}” doesn't look like a JPEG, PNG, WebP or HEIC image.`,
+        }),
+      };
+    }
+
     rows.push({
       filename: file.name.slice(0, 200) || "photo",
-      contentType: file.type,
+      contentType: detected,
       sizeBytes: file.size,
-      // Uint8Array (not Buffer) — Prisma's Bytes input requires an
-      // ArrayBuffer-backed view, and Buffer.from widens to ArrayBufferLike.
-      data: new Uint8Array(await file.arrayBuffer()),
+      data,
     });
   }
 

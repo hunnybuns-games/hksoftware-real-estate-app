@@ -407,12 +407,20 @@ or reconciliation — not just before a release.
 
 ### End-to-end (Playwright)
 
-Three scripts, not checked into the repo as of this report — they were written and run
-from the build session's scratchpad and are worth committing to `e2e/` or similar if you
-want them to survive. Covers: the original MVP flows (auth, properties, leases, Stripe
-simulation, maintenance — 48 checks), the reconciliation/import flows (16 checks), and
-the reporting/export flows (19 checks). Run against a seeded local SQLite database (`npm
-run db:migrate && npm run db:seed`) with `npm run dev` already running.
+Four suites in `e2e/`, 94 checks, run with `npm run e2e` (or one at a time — see
+`e2e/README.md` for prerequisites and the non-obvious traps): the MVP flows (auth,
+properties, leases, Stripe simulation, maintenance — 48), reconciliation and import (16),
+reporting and exports (19), and cross-org/security probes (11). They need a seeded local
+database (`npm run db:migrate && npm run db:seed`) and `npm run dev` already running.
+
+### CI
+
+`.github/workflows/ci.yml` runs on every push and pull request: one job for
+typecheck/lint/unit-tests plus the real `cf:build`, and a second that installs Chromium,
+migrates and seeds a fresh database, and runs all four e2e suites. Building through
+OpenNext rather than plain `next build` is the point of that first job — the failures
+unique to this deployment (a Node-only API reaching into a workerd isolate) only surface
+in the bundling step.
 
 ## 13. Known gaps & deliberate non-goals
 
@@ -424,12 +432,16 @@ run db:migrate && npm run db:seed`) with `npm run dev` already running.
   switch: no raw SQL, no Postgres-native column types), so moving to D1/SQLite didn't
   require re-verifying its correctness — only re-running the existing test suites, which
   passed unchanged.
-- **`docs/payments.md` is referenced but doesn't exist.** A comment in
-  `src/lib/stripe.ts` points to it ("see docs/payments.md") from early in the project;
-  the file was never actually written. Worth creating or removing the reference.
 - **No custom domain configured** — production currently lives at the default
-  `*.workers.dev` URL.
-- **Stripe is optional**, by design, not an oversight — see §5.
+  `*.workers.dev` URL. This also blocks zone-level Cloudflare features (rate limiting
+  rules, bot protection, WAF) which need a domain in your own account.
+- **Stripe is optional**, by design, not an oversight — see §5 and `docs/payments.md`.
+- **No migration tracking on D1.** Migrations are applied by hand with `wrangler d1
+  execute` (§14), so nothing records which have already run — there's no
+  `_prisma_migrations` table on the production database and no way to ask it what version
+  it's on. This has already caused one production crash: a schema change shipped without
+  its migration being applied, and the page querying the new table threw on every load.
+  Every future schema change carries the same risk until this is fixed.
 - **The Plaid bank feed (§5) has never completed a live Sandbox connect-and-sync.** It was
   built and unit-tested with real logic/crypto but no live network access to Plaid at all
   (the build session's network policy blocked Plaid's API and CDN hosts outright). Do the
@@ -443,6 +455,25 @@ run db:migrate && npm run db:seed`) with `npm run dev` already running.
 - **No security headers beyond the three baseline ones in `next.config.ts`** (nosniff,
   frame-deny, referrer-policy). No CSP — one worth having needs to be built against this
   app's actual script/style/connect sources and verified page by page, not guessed at.
+  Note that Plaid Link injects a script from `cdn.plaid.com` and opens an iframe, so that
+  has to be accounted for.
+- **Removing a team member doesn't revoke their session.** Sessions are stateless 30-day
+  JWTs and the guards read role/organization straight from the token without consulting
+  the database, so a deleted user's existing token keeps working — with full access to the
+  organization they were removed from — until it expires. Demoting an admin has the same
+  lag. The most serious open item in this file; see item 10 in the production punch list.
+- **No password reset.** A locked-out landlord has no recovery path, and neither do you
+  short of editing a password hash in D1 by hand. The `Invitation` model already shows the
+  token pattern to copy.
+- **No error tracking or uptime monitoring.** Errors go to `console.error` — i.e. Workers
+  logs, unretained by default — and the reference number shown on the error page
+  corresponds to nothing lookup-able. A silently failing integration is the most likely way
+  this app hurts someone: rent quietly stops being recorded and nobody notices for weeks.
+- **Maintenance photos are blobs in D1.** Up to 5 × 4 MB per request, against a 500 MB
+  (free) or 10 GB (paid) per-database ceiling. Deliberate simplification for shipping; R2
+  is the destination, and `canViewPhoto`'s authorization check carries over unchanged.
+- **No legal pages.** No Terms of Service, no Privacy Policy — both are also prerequisites
+  for Plaid and Stripe production access, so this blocks going live regardless.
 
 ## 14. Maintainer runbook
 
