@@ -47,14 +47,22 @@ pool to manage. See `src/lib/db.ts` for how that's wired.
    Paste the returned `database_id` into `wrangler.jsonc`'s `d1_databases[0].database_id`
    (it ships with a placeholder).
 
-2. **Apply the schema to it:**
-   ```
-   npm run cf:migrate
-   ```
-   This syncs `prisma/migrations/` into the flat layout Wrangler wants and applies
-   anything outstanding. Wrangler records what it has run in a `d1_migrations` table
-   inside the database, so it's safe to re-run — and it's the same command any time you
-   add a schema change, or to rebuild the schema after a bad restore. `npm run
+2. **Apply the schema to it.** Two routes, and the first needs no local setup:
+
+   - **From GitHub:** Actions → **D1** → Run workflow → `apply`. The same workflow also
+     applies migrations automatically whenever a commit changes `migrations/`, and takes a
+     backup first. It needs a `CLOUDFLARE_API_TOKEN` secret scoped to Account → D1 → Edit
+     (see docs/MAINTAINER.md §14); without it the run fails with the setup steps in its
+     summary.
+   - **From your machine:**
+     ```
+     npm run cf:migrate
+     ```
+
+   Either way this syncs `prisma/migrations/` into the flat layout Wrangler wants and
+   applies anything outstanding. Wrangler records what it has run in a `d1_migrations`
+   table inside the database, so it's safe to re-run — and it's the same operation any time
+   you add a schema change, or to rebuild the schema after a bad restore. `npm run
    cf:migrations:status` shows applied vs outstanding.
 
 3. **Secrets** (never committed — set once per environment):

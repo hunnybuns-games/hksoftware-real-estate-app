@@ -1,0 +1,167 @@
+name: D1
+
+# Runs Wrangler against the production D1 database from CI, so schema work no
+# longer requires being at your own machine with `wrangler login` done.
+#
+# Two ways in:
+#
+#  - **Manually**, from Actions → D1 → "Run workflow". There's a dropdown for what
+#    to do, and every run writes a readable summary. This works from the GitHub
+#    mobile app or a phone browser, which is the point: recovering the database
+#    shouldn't need a laptop.
+#  - **Automatically**, when a commit changes `migrations/`. A schema change then
+#    ships itself with the code that needs it, instead of being a step someone has
+#    to remember. Ordinary commits don't touch the database at all — note the
+#    `paths` filter, which matters here because the default branch is also the
+#    working branch.
+#
+# Every run that can modify the database exports a backup first and uploads it as
+# a workflow artifact. That's deliberate: a Time Travel restore rolls back schema
+# as well as rows, so "we can always restore" is not the same as having a copy.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to do"
+        type: choice
+        default: status
+        options:
+          - status # read-only: which migrations are applied, which are outstanding
+          - tables # read-only: list the tables that actually exist
+          - apply # apply outstanding migrations (backs up first)
+          - backup # export the database and attach it to this run
+  push:
+    paths:
+      - "migrations/**"
+
+# Never let two runs touch the same database at once.
+concurrency:
+  group: d1-production
+  cancel-in-progress: false
+
+jobs:
+  d1:
+    name: ${{ inputs.action || 'apply (migrations changed)' }}
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DB_NAME: hksoftware-real-estate-db
+      # A push to migrations/ means apply; a manual run does whatever was picked.
+      ACTION: ${{ inputs.action || 'apply' }}
+    steps:
+      # Fail with instructions rather than a wall of Wrangler auth output. This is
+      # the one piece of setup that can't be done from here — creating the token
+      # needs a Cloudflare login.
+      - name: Check credentials are configured
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            {
+              echo "### Missing \`CLOUDFLARE_API_TOKEN\`"
+              echo
+              echo "This workflow needs a Cloudflare API token to reach D1. One-time setup:"
+              echo
+              echo "1. Cloudflare dashboard → My Profile → API Tokens → **Create Token** → Custom token."
+              echo "2. Give it exactly one permission: **Account → D1 → Edit**. Nothing else —"
+              echo "   a token scoped this narrowly can't deploy code or read anything else,"
+              echo "   so a leak costs far less."
+              echo "3. In this repo: Settings → Secrets and variables → Actions → New repository secret,"
+              echo "   named \`CLOUDFLARE_API_TOKEN\`."
+              echo "4. Add a second secret \`CLOUDFLARE_ACCOUNT_ID\` (Cloudflare dashboard sidebar,"
+              echo "   or the URL after \`/accounts/\`). Only strictly needed if the token can see"
+              echo "   more than one account, but setting it removes a class of confusing failure."
+              echo
+              echo "Then re-run this workflow. Both steps are doable from a phone."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::CLOUDFLARE_API_TOKEN is not set — see this run's summary for setup steps."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Refuses to go further if migrations/ has drifted from prisma/migrations,
+      # or if an already-applied migration has been edited — Wrangler tracks by
+      # filename, so an edited migration is never re-applied and production would
+      # silently keep the old schema. Same check CI runs; repeated here because
+      # this is the job that can actually act on the difference.
+      - name: Generated migrations match Prisma
+        run: npm run cf:migrations:check
+
+      # Read-only, and always worth having in the log before anything changes.
+      - name: Migration status
+        run: |
+          {
+            echo "## Migration status"
+            echo
+            echo '```'
+            npx wrangler d1 migrations list "$DB_NAME" --remote 2>&1 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Back up the database
+        if: env.ACTION == 'apply' || env.ACTION == 'backup'
+        run: |
+          npx wrangler d1 export "$DB_NAME" --remote --output=d1-backup.sql
+          {
+            echo "## Backup"
+            echo
+            echo "\`d1-backup.sql\` — $(wc -c < d1-backup.sql) bytes, attached to this run."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach the backup to this run
+        if: env.ACTION == 'apply' || env.ACTION == 'backup'
+        uses: actions/upload-artifact@v4
+        with:
+          name: d1-backup-${{ github.run_number }}
+          path: d1-backup.sql
+          # Long enough to cover "I noticed something wrong weeks later", which is
+          # exactly the case Time Travel's window doesn't reach.
+          retention-days: 90
+
+      - name: Apply outstanding migrations
+        if: env.ACTION == 'apply'
+        run: npx wrangler d1 migrations apply "$DB_NAME" --remote
+
+      # The proof, not the assumption. A migration run that reports success but
+      # leaves no tables is the failure this repo has already seen once.
+      - name: Verify the schema
+        if: env.ACTION != 'backup'
+        run: |
+          npx wrangler d1 execute "$DB_NAME" --remote --json \
+            --command="SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;" \
+            > tables.json
+          COUNT=$(node -e "
+            const r = JSON.parse(require('fs').readFileSync('tables.json','utf8'));
+            const rows = (Array.isArray(r) ? r[0]?.results : r.result?.[0]?.results) ?? [];
+            console.log(rows.length);
+          ")
+          {
+            echo "## Tables"
+            echo
+            echo "**$COUNT** tables in \`$DB_NAME\`."
+            echo
+            echo '```'
+            node -e "
+              const r = JSON.parse(require('fs').readFileSync('tables.json','utf8'));
+              const rows = (Array.isArray(r) ? r[0]?.results : r.result?.[0]?.results) ?? [];
+              console.log(rows.map(x => x.name).join('\n'));
+            "
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # A fully migrated database has 21 tables: 18 from the schema (enums
+          # aren't tables), plus d1_migrations, sqlite_sequence and _cf_METADATA.
+          # The threshold is deliberately loose so adding a model doesn't need this
+          # number updated — it's here to catch "nothing was created", which is the
+          # failure this repo has actually seen, not to assert an exact schema.
+          if [ "$COUNT" -lt 10 ]; then
+            echo "::error::Only $COUNT tables present — the schema is not intact."
+            exit 1
+          fi

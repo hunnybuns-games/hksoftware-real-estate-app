@@ -610,7 +610,27 @@ git push origin claude/property-management-mvp-gjlizb
 
 D1 doesn't take `prisma migrate deploy` — there's no connection string to point it at.
 Wrangler applies them instead, and keeps a ledger of what it has already run in a
-`d1_migrations` table inside the database:
+`d1_migrations` table inside the database.
+
+**Normally you don't run anything.** `.github/workflows/d1.yml` applies outstanding
+migrations whenever a commit changes `migrations/`, so a schema change ships with the code
+that needs it. Ordinary commits don't touch the database — that's what the workflow's
+`paths` filter is for, and it matters here because the default branch is also the working
+branch.
+
+For anything on demand — checking status, listing the tables that actually exist, forcing
+an apply, taking a backup — use **Actions → D1 → Run workflow** and pick from the dropdown.
+Each run writes a summary you can read on a phone, which is the point: recovering the
+database shouldn't require a laptop. Anything that can modify the database exports a backup
+first and attaches it to the run, kept 90 days.
+
+That workflow needs one secret, `CLOUDFLARE_API_TOKEN`, scoped to **Account → D1 → Edit**
+and nothing else — narrow enough that a leak can't deploy code or read other resources.
+Add `CLOUDFLARE_ACCOUNT_ID` alongside it. Without the token the workflow fails immediately
+with the setup steps in its summary rather than a wall of auth errors.
+
+From your own machine (needs `npx wrangler login`, or `CLOUDFLARE_API_TOKEN` in the
+environment):
 
 ```
 npm run cf:migrations:status     # what's applied vs outstanding
@@ -618,10 +638,9 @@ npm run cf:migrate               # sync from Prisma, then apply what's missing
 ```
 
 Safe to re-run — anything already applied is skipped ("No migrations to apply!").
-Requires Cloudflare auth (`npx wrangler login`, or `CLOUDFLARE_API_TOKEN`).
 
-`npm run cf:migrate:local` does the same against the local Miniflare D1, which is a
-good way to rehearse a migration before it touches production.
+`npm run cf:migrate:local` does the same against the local Miniflare D1, which is a good
+way to rehearse a migration before it touches production.
 
 > **This replaced applying SQL by hand**, which had no record of what had run. That
 > gap cost real downtime twice: once when a deployed page queried a table that was
