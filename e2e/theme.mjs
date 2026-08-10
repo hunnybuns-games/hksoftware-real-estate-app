@@ -84,16 +84,29 @@ async function auditDarkSurfaces(page) {
  * `/portal/payments`, which doesn't exist, passed on the first run.
  */
 async function auditSurface(page, name, path) {
-  await page.goto(`${BASE}${path}`);
+  const response = await page.goto(`${BASE}${path}`);
   await page.waitForLoadState("networkidle");
 
+  /*
+   * The status comes from the navigation, not from sniffing the page text. An
+   * earlier version of this looked for "404" in the body, which quietly matched
+   * any page whose content happened to contain those three digits — including the
+   * test organization's own name, since it embeds a millisecond timestamp. It
+   * failed the settings page on exactly the runs where Date.now() contained "404".
+   */
+  const status = response?.status() ?? 0;
   const body = (await page.textContent("body")) ?? "";
   const rendered =
+    status < 400 &&
     body.length > 200 &&
-    !/This page could not be found|Something went wrong|404/.test(body) &&
+    !/This page could not be found|Something went wrong/.test(body) &&
     (await page.locator("main *").count()) > 10;
   if (!rendered) {
-    log(`${name} renders at all`, false, `${path} — ${body.slice(0, 80).replace(/\s+/g, " ")}`);
+    log(
+      `${name} renders at all`,
+      false,
+      `${path} — status=${status} ${body.slice(0, 80).replace(/\s+/g, " ")}`,
+    );
     return false;
   }
 
@@ -148,10 +161,19 @@ log(
   "the choice is remembered across a reload",
   await pageLight.evaluate(() => document.documentElement.classList.contains("dark")),
 );
-log(
-  "the remembered choice is reflected in the control, not just the colours",
-  (await pageLight.getByRole("radio", { name: "Dark" }).getAttribute("aria-checked")) === "true",
-);
+/*
+ * Waited for rather than read once. The server renders "System" pressed on
+ * purpose — it cannot know the stored preference — and the toggle corrects itself
+ * during hydration. Reading the attribute the instant reload() resolves is a race
+ * with that, and it's a race this test lost intermittently.
+ */
+const reflected = await pageLight
+  .locator('[role="radio"][aria-checked="true"]')
+  .filter({ hasText: "Dark" })
+  .waitFor({ timeout: 10000 })
+  .then(() => true)
+  .catch(() => false);
+log("the remembered choice is reflected in the control, not just the colours", reflected);
 
 await pageDark.getByRole("radio", { name: "Light" }).click();
 await pageDark.reload();

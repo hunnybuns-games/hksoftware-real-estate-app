@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -16,7 +17,12 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Set by src/middleware.ts. Without it the theme script is inline JavaScript
+  // with no nonce, which the CSP will refuse to run — and the refusal is silent,
+  // so dark mode would just stop working with nothing in the UI to explain why.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     /*
      * suppressHydrationWarning because the script below adds a class to this
@@ -28,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/* Must be here, before the body, or dark-mode users see a white flash
             on every page load. See src/lib/theme.ts. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>{children}</body>
     </html>

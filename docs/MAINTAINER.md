@@ -348,6 +348,33 @@ Sending metrics instead.
 | `src/worker/index.ts` | Cloudflare Worker wrapper — adds the cron `scheduled()` handler around the generated OpenNext worker |
 | `src/lib/__tests__/` | vitest unit tests — csv, import, ledger, reconciliation, plaid-sync, plaid-webhook |
 
+### Security headers and the CSP
+
+Three static hardening headers live in `next.config.ts` (nosniff, frame-deny,
+referrer-policy). The Content-Security-Policy can't be static because it carries a
+per-request nonce, so it lives in **`src/middleware.ts`**, which also stamps the nonce onto
+the request headers — that's how Next finds it and applies it to the script tags it
+generates itself. The one inline script we write by hand (the theme script in
+`src/app/layout.tsx`) reads the nonce out of `headers()` and sets it explicitly.
+
+Three things to know before touching it:
+
+- **Do not rename the file to `proxy.ts`.** Every build warns that `middleware` is
+  deprecated in favour of it, and following that advice breaks the deploy outright: Next's
+  `proxy.ts` always runs on the Node runtime, and `@opennextjs/cloudflare` refuses to bundle
+  Node middleware, so `npm run cf:build` exits 1. `middleware.ts` still compiles to edge,
+  which is what workerd runs.
+- **`script-src` is nonce + `strict-dynamic`, with no `'unsafe-inline'`.** `strict-dynamic`
+  is load-bearing rather than a loophole — Next loads its own chunks programmatically and
+  Plaid Link injects `cdn.plaid.com` from JavaScript, and enumerating hashes for machinery
+  that changes every build isn't maintainable.
+- **A CSP failure is silent.** A blocked inline script doesn't surface an error to the user,
+  it just doesn't run — dark mode would simply stop working. That's why `e2e:security` walks
+  15 pages in a real browser listening for `securitypolicyviolation` and separately asserts
+  the theme script still executes, rather than only checking the header's text.
+
+Stripe needs nothing here: Checkout is a redirect to Stripe's own origin, not an embed.
+
 ### Theming (read this before adding colour to a screen)
 
 `src/app/globals.css` is the whole design system: one accent, a dozen component classes,
@@ -466,10 +493,10 @@ or reconciliation — not just before a release.
 
 ### End-to-end (Playwright)
 
-Six suites in `e2e/`, 146 checks, run with `npm run e2e` (or one at a time — see
+Six suites in `e2e/`, 156 checks, run with `npm run e2e` (or one at a time — see
 `e2e/README.md` for prerequisites and the non-obvious traps): the MVP flows (auth,
 properties, leases, Stripe simulation, maintenance — 48), reconciliation and import (16),
-reporting and exports (19), cross-org/security probes (16), password reset (14), and theming (33). They need a
+reporting and exports (19), cross-org/security probes (26), password reset (14), and theming (33). They need a
 seeded local database (`npm run db:migrate && npm run db:seed`) and `npm run dev` already
 running.
 
@@ -522,24 +549,15 @@ in the bundling step.
   (the build session's network policy blocked Plaid's API and CDN hosts outright). Do the
   actual Link-connect-sync walkthrough by hand once, somewhere with real internet access,
   before trusting this with anyone's real bank account.
-- **No rate limiting on login/signup.** Flagged during a security review; bcrypt's cost
-  factor slows brute-forcing somewhat but there's no lockout. Best fixed at the Cloudflare
-  edge (a Rate Limiting rule, or the Workers-native `ratelimit` binding, GA since September
-  2025) rather than in application code — see the review notes in git history around
-  where this was found for the fuller writeup.
-- **No security headers beyond the three baseline ones in `next.config.ts`** (nosniff,
-  frame-deny, referrer-policy). No CSP — one worth having needs to be built against this
-  app's actual script/style/connect sources and verified page by page, not guessed at.
-  Note that Plaid Link injects a script from `cdn.plaid.com` and opens an iframe, so that
-  has to be accounted for.
-- **Removing a team member doesn't revoke their session.** Sessions are stateless 30-day
-  JWTs and the guards read role/organization straight from the token without consulting
-  the database, so a deleted user's existing token keeps working — with full access to the
-  organization they were removed from — until it expires. Demoting an admin has the same
-  lag. The most serious open item in this file; see item 10 in the production punch list.
-- **No password reset.** A locked-out landlord has no recovery path, and neither do you
-  short of editing a password hash in D1 by hand. The `Invitation` model already shows the
-  token pattern to copy.
+- **Rate limiting fails open.** Login, signup and password reset go through the Workers
+  `ratelimit` bindings in `wrangler.jsonc` (`src/lib/rate-limit.ts`), but if the limiter
+  throws or the binding is absent the request is allowed. That's deliberate — a limiter
+  outage must not become a login outage — with the consequence that local `next dev` has no
+  throttling at all, and `e2e:security` reports that as expected rather than as a pass.
+- **`style-src` still allows `'unsafe-inline'`.** The CSP (`src/middleware.ts`) is
+  nonce-based for scripts, which is where account takeover lives, but Next injects inline
+  `<style>` with no nonce plumbing available. Injected CSS can restyle a page and read
+  attribute values; it can't execute. Accepted, not overlooked.
 - **No error tracking or uptime monitoring.** Errors go to `console.error` — i.e. Workers
   logs, unretained by default — and the reference number shown on the error page
   corresponds to nothing lookup-able. A silently failing integration is the most likely way

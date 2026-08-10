@@ -239,6 +239,106 @@ log("open-redirect via redirectTo is blocked", !pageRedir.url().includes("evil.e
   await adminCtx.close();
 }
 
+// --- Content-Security-Policy ------------------------------------------------
+/*
+ * A CSP is easy to ship and easy to silently break: a blocked inline script
+ * doesn't raise an error a user can see, it just doesn't run. So this checks two
+ * separate things — that the policy is actually strict, and that the app still
+ * works underneath it.
+ *
+ * The second is the one that needs a real browser. Walking the app while
+ * listening for `securitypolicyviolation` is the only way to catch a page that a
+ * future change has quietly broken, and it's exactly what would have caught the
+ * theme script if its nonce had been left off.
+ */
+const cspHeaders = await fetch(`${BASE}/login`, { redirect: "manual" });
+const csp = cspHeaders.headers.get("content-security-policy") ?? "";
+log("a Content-Security-Policy is sent", csp.length > 0);
+log(
+  "script-src is nonce-based rather than 'unsafe-inline'",
+  /script-src[^;]*'nonce-/.test(csp) && !/script-src[^;]*'unsafe-inline'/.test(csp),
+  csp.match(/script-src[^;]*/)?.[0]?.slice(0, 90),
+);
+log(
+  "the nonce is per-response, not a build-time constant",
+  (() => csp.match(/'nonce-([^']+)'/)?.[1])() !== undefined,
+);
+const second = await (await fetch(`${BASE}/login`, { redirect: "manual" })).headers.get(
+  "content-security-policy",
+);
+log(
+  "two requests get different nonces (a reused nonce is no better than unsafe-inline)",
+  csp.match(/'nonce-([^']+)'/)?.[1] !== (second ?? "").match(/'nonce-([^']+)'/)?.[1],
+);
+for (const directive of ["object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'"]) {
+  log(`CSP sets ${directive}`, csp.includes(directive));
+}
+
+const cspCtx = await browser.newContext();
+const cspPage = await cspCtx.newPage();
+await cspPage.addInitScript(() => {
+  document.addEventListener("securitypolicyviolation", (event) => {
+    (window.__cspViolations ||= []).push(
+      `${event.violatedDirective} blocked ${event.blockedURI || "inline"}`,
+    );
+  });
+});
+const cspStamp = Date.now();
+await cspPage.goto(`${BASE}/signup`);
+await cspPage.locator('input[name="name"]').fill("CSP Probe");
+await cspPage.locator('input[name="organizationName"]').fill(`CSP Org ${cspStamp}`);
+await cspPage.locator('input[name="email"]').fill(`csp-${cspStamp}@example.com`);
+await cspPage.locator('input[name="password"]').fill("correct-horse-battery-C");
+await cspPage.locator('main form button[type="submit"]').click();
+await cspPage.waitForURL(/\/app/, { timeout: 20000 });
+
+const cspSurfaces = [
+  "/app",
+  "/app/properties",
+  "/app/properties/new",
+  "/app/leases",
+  "/app/tenants",
+  "/app/payments",
+  "/app/payments/import",
+  "/app/maintenance",
+  "/app/reports",
+  "/app/settings",
+  "/app/settings/team",
+  "/app/settings/payments",
+  "/app/settings/outbox",
+  "/login",
+  "/forgot-password",
+];
+const allViolations = [];
+for (const path of cspSurfaces) {
+  await cspPage.goto(`${BASE}${path}`);
+  await cspPage.waitForLoadState("networkidle");
+  const found = await cspPage.evaluate(() => {
+    const v = window.__cspViolations ?? [];
+    window.__cspViolations = [];
+    return v;
+  });
+  for (const v of found) allViolations.push(`${path}: ${v}`);
+}
+log(
+  `no CSP violations across ${cspSurfaces.length} pages`,
+  allViolations.length === 0,
+  allViolations.slice(0, 4).join(" | ") || "clean",
+);
+
+// The theme script is inline and must run before first paint, so it's the one
+// most likely to be killed by a CSP change. A silent failure here looks like
+// "dark mode randomly stopped working".
+const themeCtx = await browser.newContext({ colorScheme: "dark" });
+const themePage = await themeCtx.newPage();
+await themePage.goto(`${BASE}/login`);
+log(
+  "the inline theme script still executes under the CSP",
+  await themePage.evaluate(() => document.documentElement.classList.contains("dark")),
+);
+await cspCtx.close();
+await themeCtx.close();
+
 await browser.close();
 
 const passed = results.filter((r) => r.ok).length;

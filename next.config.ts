@@ -5,10 +5,10 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
   typedRoutes: false,
 
-  // Baseline hardening headers on every response. No CSP here on purpose —
-  // this app has no third-party scripts today, but a CSP tight enough to be
-  // worth anything needs to be built against real script/style/connect
-  // sources and verified against every page, not guessed at in passing.
+  // Baseline hardening headers on every response. The Content-Security-Policy
+  // is deliberately NOT here: it carries a per-request nonce, so it can't be a
+  // static string. It lives in src/middleware.ts — read the comment at the top
+  // of that file before touching either.
   async headers() {
     return [
       {
