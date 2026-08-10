@@ -28,6 +28,12 @@ export default async function LoginPage({
 
       <LoginForm redirectTo={next ?? "/"} />
 
+      <p className="mt-4 text-center text-sm">
+        <Link href="/forgot-password" className="link">
+          Forgot your password?
+        </Link>
+      </p>
+
       <p className="mt-6 text-center text-sm text-slate-500">
         Managing properties and don&apos;t have an account?{" "}
         <Link href="/signup" className="link">

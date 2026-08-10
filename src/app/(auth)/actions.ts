@@ -5,10 +5,22 @@ import { AuthError } from "next-auth";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { hashPassword, signIn } from "@/lib/auth";
-import { loginAttemptAllowed, signupAttemptAllowed } from "@/lib/rate-limit";
+import { appUrl, sendEmailSafely } from "@/lib/email";
+import {
+  RESET_TOKEN_TTL_MS,
+  createResetToken,
+  hashResetToken,
+  isRedeemable,
+} from "@/lib/password-reset";
+import {
+  loginAttemptAllowed,
+  passwordResetAttemptAllowed,
+  signupAttemptAllowed,
+} from "@/lib/rate-limit";
 import {
   type ActionState,
   actionError,
+  actionOk,
   emailField,
   nameField,
   parseForm,
@@ -192,6 +204,153 @@ export async function acceptInviteAction(
     }
 
     await signIn("credentials", { email: invite.email, password, redirectTo: "/" });
+    return null;
+  });
+}
+
+const requestResetSchema = z.object({ email: emailField });
+
+/**
+ * Sends a reset link — and says the same thing whether or not the address has an
+ * account.
+ *
+ * That's the whole security design of this action. A form that says "no account
+ * with that email" is a free account-enumeration oracle: anyone can walk a list
+ * of addresses and learn which of your landlords and residents are customers.
+ * The cost is that a user who typos their address gets a cheerful message and no
+ * email, which is why the copy says "if" rather than "we sent it".
+ */
+export async function requestPasswordResetAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const parsed = parseForm(requestResetSchema, formData);
+    if (!parsed.ok) return parsed.state;
+    const email = parsed.data.email;
+
+    // Rate limited for two reasons: this endpoint sends mail on demand, so it's a
+    // way to use us to spam a third party, and it's the enumeration oracle above
+    // if you can run it thousands of times and watch timing.
+    if (!(await passwordResetAttemptAllowed(email))) {
+      return actionError("Too many reset requests. Wait a minute and try again.");
+    }
+
+    const user = await db.user.findUnique({
+      where: { email },
+      select: { id: true, name: true, organizationId: true },
+    });
+
+    if (user) {
+      // Any link already outstanding stops working now. Asking for a new link is
+      // how someone reacts to "I think somebody else requested one", so the old
+      // one must not survive the request.
+      await db.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+
+      const { token, tokenHash } = await createResetToken();
+      await db.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+        },
+      });
+
+      await sendEmailSafely({
+        to: email,
+        type: "PASSWORD_RESET",
+        organizationId: user.organizationId,
+        // The link is a working account-takeover credential, and the email log is
+        // readable by every admin in the org. See `sensitive` in src/lib/email.ts.
+        sensitive: true,
+        subject: "Reset your password",
+        body: [
+          `Hi ${user.name},`,
+          `Use this link to set a new password. It works once and expires in an hour:`,
+          appUrl(`/reset-password/${token}`),
+          `If you didn't ask for this, you can ignore this email — your password hasn't changed.`,
+        ].join("\n\n"),
+        // Deliberately no dedupeKey: a dedupe key would make the second request
+        // in an hour silently do nothing, and "I never got the email, let me try
+        // again" is the single most common way this flow gets used.
+      });
+    }
+
+    return actionOk(
+      "If an account exists for that address, a reset link is on its way. Check your inbox.",
+    );
+  });
+}
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: passwordField,
+});
+
+/**
+ * Redeems a reset link and sets the new password.
+ *
+ * Everything happens in one transaction that also marks the token used, so two
+ * simultaneous submissions of the same link can't both succeed.
+ */
+export async function resetPasswordAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const parsed = parseForm(resetPasswordSchema, formData);
+    if (!parsed.ok) return parsed.state;
+    const { token, password } = parsed.data;
+
+    const tokenHash = await hashResetToken(token);
+    const row = await db.passwordResetToken.findUnique({
+      where: { tokenHash },
+      select: {
+        id: true,
+        expiresAt: true,
+        usedAt: true,
+        user: { select: { id: true, email: true } },
+      },
+    });
+
+    const UNUSABLE = "This reset link isn't usable any more. Request a new one and it'll work.";
+    if (!row || !isRedeemable(row)) return actionError(UNUSABLE);
+
+    const passwordHash = await hashPassword(password);
+
+    let claimed = false;
+    await db.$transaction(async (tx) => {
+      // Scoped to usedAt: null so a concurrent redemption of the same link
+      // updates zero rows rather than both winning. Reported through a flag
+      // rather than a thrown error, so the caller can tell "someone else already
+      // used this link" apart from a genuine failure.
+      const result = await tx.passwordResetToken.updateMany({
+        where: { id: row.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      if (result.count === 0) return;
+      claimed = true;
+
+      await tx.user.update({
+        where: { id: row.user.id },
+        data: { passwordHash },
+      });
+
+      // Every other outstanding link for this user dies with the password change.
+      await tx.passwordResetToken.updateMany({
+        where: { userId: row.user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+    });
+
+    if (!claimed) return actionError(UNUSABLE);
+
+    // Straight into the app — making someone re-type the password they just set
+    // is friction with nothing behind it, and the link they used was the proof.
+    await signIn("credentials", { email: row.user.email, password, redirectTo: "/" });
     return null;
   });
 }

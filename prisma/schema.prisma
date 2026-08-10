@@ -131,6 +131,7 @@ enum NotificationType {
   MAINTENANCE_UPDATED
   STAFF_INVITE
   TENANT_INVITE
+  PASSWORD_RESET
 }
 
 enum NotificationStatus {
@@ -231,8 +232,31 @@ model User {
   maintenanceNotes MaintenanceNote[]
   requestsCreated  MaintenanceRequest[] @relation("MaintenanceRequestCreatedBy")
   importBatches    PaymentImportBatch[]
+  passwordResets   PasswordResetToken[]
 
   @@index([organizationId])
+}
+
+/**
+ * A single-use password reset link.
+ *
+ * Stores the SHA-256 of the token, never the token itself. The value in the
+ * emailed link is the only copy, so a leaked database snapshot can't be turned
+ * into account access — which is not true of Invitation.token above, and is the
+ * reason this model doesn't just reuse that pattern.
+ */
+model PasswordResetToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /** SHA-256 hex of the token. Unique so a lookup is a single indexed read. */
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Invitation {

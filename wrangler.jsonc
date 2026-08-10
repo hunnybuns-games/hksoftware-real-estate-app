@@ -74,6 +74,14 @@
       "name": "SIGNUP_RATE_LIMIT",
       "namespace_id": "1002",
       "simple": { "limit": 5, "period": 60 }
+    },
+    {
+      // Tightest of the three, because this endpoint sends mail on demand: left
+      // open it's a way to use us to flood somebody else's inbox. Three a minute
+      // still covers "I didn't get it, send it again".
+      "name": "PASSWORD_RESET_RATE_LIMIT",
+      "namespace_id": "1003",
+      "simple": { "limit": 3, "period": 60 }
     }
   ],
   /**

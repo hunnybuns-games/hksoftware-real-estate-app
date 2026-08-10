@@ -1,5 +1,54 @@
-import { describe, expect, it } from "vitest";
-import { describeEmailError } from "@/lib/email";
+import { afterEach, describe, expect, it } from "vitest";
+import { bodyForLog, describeEmailError } from "@/lib/email";
+
+/**
+ * The recorded copy of a message is not always the sent copy. A password reset
+ * link is a working account-takeover credential and NotificationLog is readable
+ * at /app/settings/outbox by every admin in the organization, so in production
+ * the link is stripped before it's stored.
+ */
+describe("bodyForLog", () => {
+  const original = process.env.NODE_ENV;
+  afterEach(() => {
+    // NODE_ENV is readonly in the types but writable at runtime; vitest needs it
+    // put back or later tests inherit the change.
+    (process.env as Record<string, string | undefined>).NODE_ENV = original;
+  });
+
+  const body = "Use this link:\n\nhttps://app.example.com/reset-password/SECRET-TOKEN\n\nIgnore if not you.";
+
+  it("strips links from a sensitive body in production", () => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+    const out = bodyForLog(body, true);
+    expect(out).not.toContain("SECRET-TOKEN");
+    expect(out).toContain("[link removed from this log]");
+    // The surrounding prose survives, so the log still reads as a record of what
+    // was sent rather than an empty row.
+    expect(out).toContain("Use this link:");
+  });
+
+  it("keeps a non-sensitive body intact in production", () => {
+    // Invitation links are deliberately not stripped: they're scoped to one
+    // invited address and reading one out of the log is how a manager re-sends it.
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+    expect(bodyForLog(body, undefined)).toBe(body);
+  });
+
+  it("keeps a sensitive body outside production, where the log is the inbox", () => {
+    // Nothing is delivered in logged mode, so redacting here would make the flow
+    // impossible to follow locally and untestable end to end.
+    (process.env as Record<string, string | undefined>).NODE_ENV = "development";
+    expect(bodyForLog(body, true)).toBe(body);
+  });
+
+  it("strips every link, not just the first", () => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+    const two = "http://a.test/x/TOKEN1 and https://b.test/y/TOKEN2";
+    const out = bodyForLog(two, true);
+    expect(out).not.toContain("TOKEN1");
+    expect(out).not.toContain("TOKEN2");
+  });
+});
 
 /**
  * `describeEmailError` is what a landlord actually reads when a rent notice

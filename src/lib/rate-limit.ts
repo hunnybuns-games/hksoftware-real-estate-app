@@ -16,7 +16,7 @@ import { headers } from "next/headers";
  * where this app was before this file existed.
  */
 
-type LimiterName = "LOGIN_RATE_LIMIT" | "SIGNUP_RATE_LIMIT";
+type LimiterName = "LOGIN_RATE_LIMIT" | "SIGNUP_RATE_LIMIT" | "PASSWORD_RESET_RATE_LIMIT";
 
 /**
  * The limiter binding, or null when there isn't one — local `next dev` has no
@@ -90,4 +90,18 @@ export async function loginAttemptAllowed(email: string): Promise<boolean> {
 export async function signupAttemptAllowed(): Promise<boolean> {
   const ip = await clientIp();
   return allowed("SIGNUP_RATE_LIMIT", [ip ? `signup:ip:${ip}` : null]);
+}
+
+/**
+ * Reset requests. Keyed by both address and account, like login — the per-email
+ * key is what stops someone using us to mail-bomb one person's inbox, and the
+ * per-IP key is what stops a script walking a list of addresses to learn which
+ * ones have accounts.
+ */
+export async function passwordResetAttemptAllowed(email: string): Promise<boolean> {
+  const ip = await clientIp();
+  return allowed("PASSWORD_RESET_RATE_LIMIT", [
+    ip ? `reset:ip:${ip}` : null,
+    `reset:email:${email.trim().toLowerCase()}`,
+  ]);
 }

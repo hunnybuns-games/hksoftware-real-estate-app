@@ -466,10 +466,10 @@ or reconciliation — not just before a release.
 
 ### End-to-end (Playwright)
 
-Five suites in `e2e/`, 132 checks, run with `npm run e2e` (or one at a time — see
+Six suites in `e2e/`, 146 checks, run with `npm run e2e` (or one at a time — see
 `e2e/README.md` for prerequisites and the non-obvious traps): the MVP flows (auth,
 properties, leases, Stripe simulation, maintenance — 48), reconciliation and import (16),
-reporting and exports (19), cross-org/security probes (16), and theming (33). They need a
+reporting and exports (19), cross-org/security probes (16), password reset (14), and theming (33). They need a
 seeded local database (`npm run db:migrate && npm run db:seed`) and `npm run dev` already
 running.
 
@@ -492,7 +492,7 @@ it honest —
 
 `.github/workflows/ci.yml` runs on every push and pull request: one job for
 typecheck/lint/unit-tests plus the real `cf:build`, and a second that installs Chromium,
-migrates and seeds a fresh database, and runs all five e2e suites. Building through
+migrates and seeds a fresh database, and runs all six e2e suites. Building through
 OpenNext rather than plain `next build` is the point of that first job — the failures
 unique to this deployment (a Node-only API reaching into a workerd isolate) only surface
 in the bundling step.

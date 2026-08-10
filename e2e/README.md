@@ -1,6 +1,6 @@
 # End-to-end suites
 
-Five Playwright scripts that drive a real browser against a running dev server.
+Six Playwright scripts that drive a real browser against a running dev server.
 They're plain Node scripts rather than a Playwright test-runner project on
 purpose — each one reads top-to-bottom as a description of the flow it checks,
 which is what you want when one fails at 2am and you need to know what it was
@@ -20,6 +20,7 @@ npm run e2e                             # or one at a time, see below
 | `npm run e2e:reconciliation` | HAP/subsidy splits, manual source-aware entry, the CSV import flow | 16 |
 | `npm run e2e:reports` | rent roll, P&L, owner statements, every CSV export, owner scoping | 19 |
 | `npm run e2e:security` | cross-org isolation, signup/login abuse, role boundaries, open redirect, session revocation | 16 |
+| `npm run e2e:password-reset` | the reset flow: no account enumeration, single-use links, old password revoked | 14 |
 | `npm run e2e:theme` | dark mode: OS default, explicit choice, persistence, and a colour audit of every surface | 33 |
 
 Each prints one line per check and exits non-zero if any failed.

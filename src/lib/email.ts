@@ -34,7 +34,32 @@ export type SendEmailInput = {
   organizationId?: string | null;
   /** Pass a stable key to make a send idempotent (rent reminders, etc.). */
   dedupeKey?: string;
+  /**
+   * Set when the body contains a single-use credential — a password reset link.
+   * The message is still sent in full; what changes is what gets *recorded*.
+   *
+   * This matters because NotificationLog is readable in the app at
+   * /app/settings/outbox, scoped to the organization. Recording a live reset link
+   * there would put a working account-takeover link in front of every admin in
+   * the org, and would defeat the point of storing only a hash of the token
+   * (src/lib/password-reset.ts) — the plaintext would be sitting in another table.
+   */
+  sensitive?: boolean;
 };
+
+/**
+ * What to persist for a message body.
+ *
+ * Outside production the full body is kept, because in "logged" mode nothing is
+ * delivered and the log *is* the inbox — it's how local dev and the e2e suite
+ * follow a reset link, and there's no delivered email to compromise. In
+ * production a sensitive body is recorded with its URLs stripped: the audit trail
+ * only needs "a reset was requested, at this time, to this address".
+ */
+export function bodyForLog(body: string, sensitive: boolean | undefined): string {
+  if (!sensitive || process.env.NODE_ENV !== "production") return body;
+  return body.replace(/https?:\/\/\S+/g, "[link removed from this log]");
+}
 
 /**
  * The placeholder in .env.example. Treated as "unset": sending from
@@ -203,7 +228,8 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     type: input.type,
     toEmail: input.to,
     subject: input.subject,
-    body: input.body,
+    // Note this is the *recorded* body, not the sent one — see bodyForLog.
+    body: bodyForLog(input.body, input.sensitive),
     dedupeKey: input.dedupeKey ?? null,
   };
 
