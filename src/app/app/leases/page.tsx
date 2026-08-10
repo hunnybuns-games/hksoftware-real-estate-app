@@ -112,11 +112,11 @@ export default async function LeasesPage() {
                   </td>
                   <td className="td text-right tabular-nums">
                     {balance.balanceCents > 0 ? (
-                      <span className={balance.isLate ? "font-medium text-red-700" : "font-medium text-amber-700"}>
+                      <span className={balance.isLate ? "font-medium text-red-700 dark:text-red-300" : "font-medium text-amber-700 dark:text-amber-300"}>
                         {formatCents(balance.balanceCents)}
                       </span>
                     ) : balance.balanceCents < 0 ? (
-                      <span className="text-emerald-700">
+                      <span className="text-emerald-700 dark:text-emerald-300">
                         {formatCents(-balance.balanceCents)} credit
                       </span>
                     ) : (

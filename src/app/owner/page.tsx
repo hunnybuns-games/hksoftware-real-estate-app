@@ -103,7 +103,7 @@ export default async function OwnerDashboardPage() {
               <td className="td text-right tabular-nums">{formatCents(p.collectedCents)}</td>
               <td className="td text-right tabular-nums">
                 {p.outstandingCents > 0 ? (
-                  <span className="font-medium text-amber-700">
+                  <span className="font-medium text-amber-700 dark:text-amber-300">
                     {formatCents(p.outstandingCents)}
                   </span>
                 ) : (

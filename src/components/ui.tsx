@@ -68,9 +68,9 @@ export function StatTile({
 }) {
   const valueTone = {
     default: "text-slate-900",
-    positive: "text-emerald-700",
-    warning: "text-amber-700",
-    danger: "text-red-700",
+    positive: "text-emerald-700 dark:text-emerald-300",
+    warning: "text-amber-700 dark:text-amber-300",
+    danger: "text-red-700 dark:text-red-300",
   }[tone];
 
   return (
@@ -84,13 +84,23 @@ export function StatTile({
 
 type BadgeTone = "neutral" | "green" | "amber" | "red" | "blue" | "slate";
 
+/*
+ * The two neutral tones need no `dark:` — the slate scale is theme-aware (see
+ * src/app/globals.css). The coloured ones do: a `-50` tint stays a bright pastel
+ * in dark mode and its `-700` text stays unreadably dark, so both ends move. The
+ * dark recipe is the same every time — a translucent wash of the `-500` for the
+ * fill and ring, and a `-200`/`-300` for the text — which keeps the badges
+ * reading as one family rather than six unrelated colours.
+ */
 const badgeTones: Record<BadgeTone, string> = {
   neutral: "bg-slate-100 text-slate-700 ring-slate-200",
   slate: "bg-slate-100 text-slate-600 ring-slate-200",
-  green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  amber: "bg-amber-50 text-amber-800 ring-amber-200",
-  red: "bg-red-50 text-red-700 ring-red-200",
-  blue: "bg-brand-50 text-brand-700 ring-brand-200",
+  green:
+    "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/12 dark:text-emerald-300 dark:ring-emerald-400/25",
+  amber:
+    "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/12 dark:text-amber-300 dark:ring-amber-400/25",
+  red: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/12 dark:text-red-300 dark:ring-red-400/25",
+  blue: "bg-brand-50 text-brand-700 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-400/25",
 };
 
 export function Badge({
@@ -270,10 +280,13 @@ export function Banner({
   action?: ReactNode;
 }) {
   const tones = {
-    info: "border-brand-200 bg-brand-50 text-brand-900",
-    warning: "border-amber-200 bg-amber-50 text-amber-900",
-    success: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    danger: "border-red-200 bg-red-50 text-red-900",
+    info: "border-brand-200 bg-brand-50 text-brand-900 dark:border-brand-400/25 dark:bg-brand-500/12 dark:text-brand-100",
+    warning:
+      "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-400/25 dark:bg-amber-500/12 dark:text-amber-100",
+    success:
+      "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-400/25 dark:bg-emerald-500/12 dark:text-emerald-100",
+    danger:
+      "border-red-200 bg-red-50 text-red-900 dark:border-red-400/25 dark:bg-red-500/12 dark:text-red-100",
   }[tone];
 
   return (

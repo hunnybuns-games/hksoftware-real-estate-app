@@ -9,7 +9,7 @@ export function DeleteExpenseButton({ action }: { action: (state: ActionState) =
 
   return (
     <form action={formAction}>
-      {state && !state.ok ? <span className="mr-2 text-xs text-red-600">{state.error}</span> : null}
+      {state && !state.ok ? <span className="mr-2 text-xs text-red-600 dark:text-red-400">{state.error}</span> : null}
       <RemoveButton />
     </form>
   );
@@ -21,7 +21,7 @@ function RemoveButton() {
     <button
       type="submit"
       disabled={pending}
-      className="text-xs font-medium text-slate-500 hover:text-red-700 disabled:opacity-50"
+      className="text-xs font-medium text-slate-500 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
     >
       {pending ? "Removing…" : "Remove"}
     </button>

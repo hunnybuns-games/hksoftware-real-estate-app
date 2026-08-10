@@ -102,7 +102,7 @@ export default async function DashboardPage({
               },
             ].map((step) => (
               <li key={step.n} className="flex flex-wrap items-center gap-4 py-4 first:pt-0 last:pb-0">
-                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-brand-50 dark:bg-brand-500/15 text-xs font-semibold text-brand-700 dark:text-brand-300">
                   {step.n}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -199,10 +199,10 @@ export default async function DashboardPage({
           padded={false}
           actions={
             <>
-              <a href="/api/export/rent-roll" className="text-xs font-medium text-brand-700 hover:underline">
+              <a href="/api/export/rent-roll" className="text-xs font-medium text-brand-700 dark:text-brand-300 hover:underline">
                 Export CSV
               </a>
-              <Link href="/app/payments" className="text-xs font-medium text-brand-700 hover:underline">
+              <Link href="/app/payments" className="text-xs font-medium text-brand-700 dark:text-brand-300 hover:underline">
                 All rent activity
               </Link>
             </>
@@ -297,7 +297,7 @@ export default async function DashboardPage({
             title="Recent payments"
             padded={false}
             actions={
-              <a href="/api/export/payments" className="text-xs font-medium text-brand-700 hover:underline">
+              <a href="/api/export/payments" className="text-xs font-medium text-brand-700 dark:text-brand-300 hover:underline">
                 Export CSV
               </a>
             }

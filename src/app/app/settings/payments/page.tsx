@@ -55,8 +55,8 @@ export default async function PaymentSettingsPage({
 
       {!stripeEnabled ? (
         <Banner tone="warning" title="Stripe isn't configured on this deployment">
-          Set <code className="rounded bg-white/60 px-1">STRIPE_SECRET_KEY</code> and{" "}
-          <code className="rounded bg-white/60 px-1">STRIPE_WEBHOOK_SECRET</code> in your
+          Set <code className="rounded bg-white/60 px-1 dark:bg-white/10">STRIPE_SECRET_KEY</code> and{" "}
+          <code className="rounded bg-white/60 px-1 dark:bg-white/10">STRIPE_WEBHOOK_SECRET</code> in your
           environment, then reload. Until then you can still track rent and record payments by
           hand — you just can&apos;t collect online.
         </Banner>
@@ -150,9 +150,9 @@ export default async function PaymentSettingsPage({
 
           {!plaidEnabled ? (
             <Banner tone="warning" title="Not configured on this deployment">
-              Set <code className="rounded bg-white/60 px-1">PLAID_CLIENT_ID</code>,{" "}
-              <code className="rounded bg-white/60 px-1">PLAID_SECRET</code>, and{" "}
-              <code className="rounded bg-white/60 px-1">BANK_TOKEN_ENCRYPTION_KEY</code> to enable
+              Set <code className="rounded bg-white/60 px-1 dark:bg-white/10">PLAID_CLIENT_ID</code>,{" "}
+              <code className="rounded bg-white/60 px-1 dark:bg-white/10">PLAID_SECRET</code>, and{" "}
+              <code className="rounded bg-white/60 px-1 dark:bg-white/10">BANK_TOKEN_ENCRYPTION_KEY</code> to enable
               this. Until then, Venmo/Cash App/bank statements can still be uploaded by hand under{" "}
               <strong>Payments → Import</strong>.
             </Banner>

@@ -145,7 +145,7 @@ export default async function TenantDetailPage({
           <Card title="Resident portal">
             {tenant.userId ? (
               <div className="space-y-2 text-sm">
-                <p className="font-medium text-emerald-700">Portal is active</p>
+                <p className="font-medium text-emerald-700 dark:text-emerald-300">Portal is active</p>
                 <p className="text-slate-500">
                   Last signed in {tenant.user?.lastLoginAt ? formatDateTime(tenant.user.lastLoginAt) : "never"}.
                 </p>

@@ -97,7 +97,7 @@ export default async function MaintenancePage({
             aria-current={filter === f.key ? "page" : undefined}
             className={
               filter === f.key
-                ? "rounded-lg bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-800"
+                ? "rounded-lg bg-brand-50 dark:bg-brand-500/15 px-3 py-1.5 text-sm font-medium text-brand-800 dark:text-brand-200"
                 : "rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
             }
           >

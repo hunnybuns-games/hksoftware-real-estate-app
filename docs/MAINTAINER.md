@@ -312,6 +312,29 @@ Cron (`vercel.json`, no longer wired up but left in the repo).
 | `src/worker/index.ts` | Cloudflare Worker wrapper — adds the cron `scheduled()` handler around the generated OpenNext worker |
 | `src/lib/__tests__/` | vitest unit tests — csv, import, ledger, reconciliation, plaid-sync, plaid-webhook |
 
+### Theming (read this before adding colour to a screen)
+
+`src/app/globals.css` is the whole design system: one accent, a dozen component classes,
+and the light/dark palettes. Two things there will surprise you if you don't know them:
+
+- **`slate-*` is this app's neutral scale, and it is theme-aware.** `--color-slate-*` is
+  redefined to point at runtime variables that flip in dark mode, so `text-slate-500`,
+  `border-slate-200` and `divide-slate-100` already work in both themes with no `dark:`
+  variant. In light mode the values are Tailwind's slate exactly, so nothing about the
+  original design changed. Use slate for neutrals and dark mode comes free; the scale is
+  not simply mirrored, because `bg-slate-50` (a recessed row) and `border-slate-200` (a
+  rule) have to move in *opposite* directions relative to a card.
+- **Accent colours are not remapped and do need `dark:`.** Each of red/amber/emerald/brand
+  is used both as a light tint behind dark text and as a saturated fill behind white text —
+  `text-red-700` is body copy on a pink panel while `bg-red-700` is a destructive button —
+  and one variable can't be both. The house recipe for a tinted panel in dark mode is a
+  translucent `-500` wash for the fill and ring plus `-200`/`-300` text; `src/components/ui.tsx`
+  has it in one place for badges and banners.
+- **Raised surfaces are `bg-surface`, not `bg-white`.** Cards, inputs, the sidebar. "White"
+  was never the intent — "the layer above the page" was.
+
+`npm run e2e:theme` enforces all of this; see [§12](#12-testing).
+
 ## 10. Environments & configuration
 
 Local development never touches Cloudflare at all — `npm run dev` is plain `next dev`
@@ -407,17 +430,33 @@ or reconciliation — not just before a release.
 
 ### End-to-end (Playwright)
 
-Four suites in `e2e/`, 94 checks, run with `npm run e2e` (or one at a time — see
+Five suites in `e2e/`, 132 checks, run with `npm run e2e` (or one at a time — see
 `e2e/README.md` for prerequisites and the non-obvious traps): the MVP flows (auth,
 properties, leases, Stripe simulation, maintenance — 48), reconciliation and import (16),
-reporting and exports (19), and cross-org/security probes (11). They need a seeded local
-database (`npm run db:migrate && npm run db:seed`) and `npm run dev` already running.
+reporting and exports (19), cross-org/security probes (16), and theming (33). They need a
+seeded local database (`npm run db:migrate && npm run db:seed`) and `npm run dev` already
+running.
+
+`theme.mjs` is worth knowing about because it isn't a click-through script. Most of it is
+one function, `auditDarkSurfaces`, walking every rendered element on a page and flagging
+anything still painting an opaque light background or near-black text while the page is in
+dark mode. That's what makes dark mode maintainable across ~50 files: adding a screen that
+hardcodes a light colour fails a check instead of quietly shipping. Two details that keep
+it honest —
+
+- It **self-tests**. Before trusting a run of clean results it points the same function at
+  the dashboard in *light* mode, where white cards are correct and plentiful, and requires
+  it to find problems. "0 problems everywhere" is also what a broken audit reports.
+- Every audited page must **prove it rendered** (real text, real element count, no 404 or
+  error boundary) before its colour result counts. An empty page passes a colour audit
+  trivially; the first version of this suite gave a clean PASS for `/portal/payments`,
+  which doesn't exist.
 
 ### CI
 
 `.github/workflows/ci.yml` runs on every push and pull request: one job for
 typecheck/lint/unit-tests plus the real `cf:build`, and a second that installs Chromium,
-migrates and seeds a fresh database, and runs all four e2e suites. Building through
+migrates and seeds a fresh database, and runs all five e2e suites. Building through
 OpenNext rather than plain `next build` is the point of that first job — the failures
 unique to this deployment (a Node-only API reaching into a workerd isolate) only surface
 in the bundling step.

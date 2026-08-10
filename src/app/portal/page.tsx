@@ -61,7 +61,7 @@ export default async function PortalHomePage({
         </p>
         <p
           className={`mt-1 text-4xl font-semibold tabular-nums ${
-            balance.isLate ? "text-red-700" : owes ? "text-slate-900" : "text-emerald-700"
+            balance.isLate ? "text-red-700 dark:text-red-300" : owes ? "text-slate-900" : "text-emerald-700 dark:text-emerald-300"
           }`}
         >
           {formatCents(Math.max(0, balance.balanceCents))}
@@ -84,7 +84,7 @@ export default async function PortalHomePage({
         )}
 
         {balance.pendingCents > 0 ? (
-          <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-900">
+          <p className="mt-3 rounded-lg bg-brand-50 dark:bg-brand-500/15 px-3 py-2 text-sm text-brand-900 dark:text-brand-100">
             {formatCents(balance.pendingCents)} is on its way — no need to pay it again.
           </p>
         ) : null}
@@ -151,7 +151,7 @@ export default async function PortalHomePage({
                         : "Recorded by your manager"}
                   </p>
                   {payment.failureMessage ? (
-                    <p className="text-xs text-red-600">{payment.failureMessage}</p>
+                    <p className="text-xs text-red-600 dark:text-red-400">{payment.failureMessage}</p>
                   ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-3">

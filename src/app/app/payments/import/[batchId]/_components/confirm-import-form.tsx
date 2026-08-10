@@ -26,7 +26,7 @@ export function ConfirmImportForm({
         <>
           <div className="px-5 pt-4">
             {state && !state.ok ? (
-              <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-800">
+              <p className="mb-3 rounded-lg border border-red-200 dark:border-red-400/25 bg-red-50 dark:bg-red-500/12 px-3.5 py-2.5 text-sm text-red-800 dark:text-red-200">
                 {state.error}
               </p>
             ) : null}
@@ -57,7 +57,7 @@ export function ConfirmImportForm({
                     {row.description}
                   </span>
                   {row.parseError ? (
-                    <span className="block text-xs text-red-600">{row.parseError} — skipped</span>
+                    <span className="block text-xs text-red-600 dark:text-red-400">{row.parseError} — skipped</span>
                   ) : null}
                 </td>
                 <td className="td">

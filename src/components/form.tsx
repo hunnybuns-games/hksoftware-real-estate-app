@@ -47,7 +47,7 @@ export function FormError({ state }: { state: ActionState }) {
   return (
     <div
       role="alert"
-      className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-800"
+      className="rounded-lg border border-red-200 dark:border-red-400/25 bg-red-50 dark:bg-red-500/12 px-3.5 py-2.5 text-sm text-red-800 dark:text-red-200"
     >
       {state.error}
     </div>
@@ -59,7 +59,7 @@ export function FormSuccess({ state }: { state: ActionState }) {
   return (
     <div
       role="status"
-      className="rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800"
+      className="rounded-lg border border-emerald-200 dark:border-emerald-400/25 bg-emerald-50 dark:bg-emerald-500/12 px-3.5 py-2.5 text-sm text-emerald-800 dark:text-emerald-200"
     >
       {state.message}
     </div>
@@ -88,7 +88,7 @@ export function Field({
     <div className={className}>
       <label htmlFor={name} className="label">
         {label}
-        {required ? <span className="ml-0.5 text-red-500">*</span> : null}
+        {required ? <span className="ml-0.5 text-red-500 dark:text-red-400">*</span> : null}
       </label>
       {children}
       {hint && !error ? <p className="hint">{hint}</p> : null}

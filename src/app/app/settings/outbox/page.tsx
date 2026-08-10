@@ -37,8 +37,8 @@ export default async function OutboxPage() {
       {loggedOnly ? (
         <Banner tone="warning" title="No email provider configured">
           Nothing is actually being delivered. Messages are recorded here so you can see exactly
-          what would have gone out. Set <code className="rounded bg-white/60 px-1">RESEND_API_KEY</code>{" "}
-          and <code className="rounded bg-white/60 px-1">EMAIL_FROM</code> to start sending.
+          what would have gone out. Set <code className="rounded bg-white/60 px-1 dark:bg-white/10">RESEND_API_KEY</code>{" "}
+          and <code className="rounded bg-white/60 px-1 dark:bg-white/10">EMAIL_FROM</code> to start sending.
         </Banner>
       ) : null}
 
@@ -77,7 +77,7 @@ export default async function OutboxPage() {
                   </summary>
                   <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-4">
                     {log.error ? (
-                      <p className="mb-3 text-xs text-red-700">{log.error}</p>
+                      <p className="mb-3 text-xs text-red-700 dark:text-red-300">{log.error}</p>
                     ) : null}
                     <pre className="text-xs leading-relaxed whitespace-pre-wrap text-slate-700">
                       {log.body}

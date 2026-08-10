@@ -239,7 +239,7 @@ export default async function LeaseDetailPage({
                         <span className="block text-xs text-slate-500">{payment.memo}</span>
                       ) : null}
                       {payment.failureMessage ? (
-                        <span className="block text-xs text-red-600">{payment.failureMessage}</span>
+                        <span className="block text-xs text-red-600 dark:text-red-400">{payment.failureMessage}</span>
                       ) : null}
                     </td>
                     <td className="td">

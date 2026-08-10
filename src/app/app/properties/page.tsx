@@ -61,7 +61,7 @@ export default async function PropertiesPage() {
                     {p.name}
                   </Link>
                   {p.openRequests > 0 ? (
-                    <span className="ml-2 text-xs text-amber-700">
+                    <span className="ml-2 text-xs text-amber-700 dark:text-amber-300">
                       {p.openRequests} open request{p.openRequests === 1 ? "" : "s"}
                     </span>
                   ) : null}
@@ -82,7 +82,7 @@ export default async function PropertiesPage() {
                 </td>
                 <td className="td text-right tabular-nums">
                   {p.outstandingCents > 0 ? (
-                    <span className="font-medium text-amber-700">
+                    <span className="font-medium text-amber-700 dark:text-amber-300">
                       {formatCentsShort(p.outstandingCents)}
                     </span>
                   ) : (

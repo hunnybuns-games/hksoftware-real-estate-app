@@ -17,7 +17,7 @@ export function RunRentButton() {
       {state?.ok && state.message ? (
         <span className="text-xs text-slate-500">{state.message}</span>
       ) : null}
-      {state && !state.ok ? <span className="text-xs text-red-600">{state.error}</span> : null}
+      {state && !state.ok ? <span className="text-xs text-red-600 dark:text-red-400">{state.error}</span> : null}
       <SubmitButton variant="secondary" pendingLabel="Posting rent…">
         Post rent charges
       </SubmitButton>

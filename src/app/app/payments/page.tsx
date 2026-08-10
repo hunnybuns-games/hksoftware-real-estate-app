@@ -192,7 +192,7 @@ export default async function PaymentsPage() {
                   <td className="td text-right font-medium tabular-nums">
                     {formatCents(lease.balance.balanceCents)}
                     {lease.balance.pendingCents > 0 ? (
-                      <span className="block text-xs font-normal text-brand-700">
+                      <span className="block text-xs font-normal text-brand-700 dark:text-brand-300">
                         {formatCents(lease.balance.pendingCents)} clearing
                       </span>
                     ) : null}
@@ -260,7 +260,7 @@ export default async function PaymentsPage() {
                         {p.lease.tenant.firstName} {p.lease.tenant.lastName}
                       </Link>
                     ) : (
-                      <span className="text-amber-700">Unmatched</span>
+                      <span className="text-amber-700 dark:text-amber-300">Unmatched</span>
                     )}
                   </td>
                   <td className="td text-slate-500">

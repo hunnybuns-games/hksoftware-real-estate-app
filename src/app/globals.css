@@ -7,6 +7,103 @@
  * chrome than this, the screen is probably doing too much.
  */
 
+/*
+ * ---------------------------------------------------------------------------
+ * Dark mode
+ * ---------------------------------------------------------------------------
+ * `dark:` is driven by a class on <html>, not by the `prefers-color-scheme`
+ * media query Tailwind uses by default. The inline script in src/app/layout.tsx
+ * sets that class from the stored preference, falling back to the OS setting —
+ * so the app still follows the OS out of the box, but a user who picks a theme
+ * gets what they picked. A media-query variant can't express that: the query and
+ * an explicit choice would disagree and the CSS would have no way to know which
+ * one won.
+ *
+ * THE NEUTRAL SCALE IS THEME-AWARE. `--color-slate-*` below is redefined to
+ * point at runtime variables that flip in dark mode, so `text-slate-500`,
+ * `border-slate-200`, `divide-slate-100` and friends already work in both
+ * themes with no `dark:` variant. That's deliberate: ~275 of this app's ~281
+ * colour utilities are slate, and hand-writing a `dark:` for each of them is
+ * both a huge diff and something a future screen would silently forget to do.
+ * Two consequences worth knowing:
+ *
+ *   - `slate` here means "this app's neutral", not literally Tailwind's slate.
+ *     In light mode the values ARE Tailwind's slate, exactly, so nothing about
+ *     the existing design changed.
+ *   - The scale is not simply mirrored. Low steps have two jobs — 50 is a
+ *     recessed background, while 100/200/300 are lines and chips — and in dark
+ *     mode those move in opposite directions relative to a surface. So 50 goes
+ *     darker than the card and 100–300 go lighter, which is what makes both
+ *     `bg-slate-50` rows and `border-slate-200` rules read correctly.
+ *
+ * Accent colours (brand/red/amber/emerald) are NOT remapped, because each of
+ * them is used both as light-tint backgrounds and as saturated button fills —
+ * `bg-red-700` is a destructive button while `text-red-700` is body copy on a
+ * pink panel, and one variable can't be both. Those get explicit `dark:`
+ * variants, which is tractable since they're concentrated in the component
+ * classes below and in src/components/ui.tsx.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Light: Tailwind v4's slate, verbatim. */
+  --neutral-50: oklch(98.4% 0.003 247.858);
+  --neutral-100: oklch(96.8% 0.007 247.896);
+  --neutral-200: oklch(92.9% 0.013 255.508);
+  --neutral-300: oklch(86.9% 0.022 252.894);
+  --neutral-400: oklch(70.4% 0.04 256.788);
+  --neutral-500: oklch(55.4% 0.046 257.417);
+  --neutral-600: oklch(44.6% 0.043 257.281);
+  --neutral-700: oklch(37.2% 0.044 257.287);
+  --neutral-800: oklch(27.9% 0.041 260.031);
+  --neutral-900: oklch(20.8% 0.042 265.755);
+  --neutral-950: oklch(12.9% 0.042 264.695);
+
+  /*
+   * Raised surfaces — cards, inputs, the sidebar, secondary buttons. This is
+   * what `bg-white` used to mean in those places; plain white can't be themed,
+   * and "white" was never the intent, "the layer above the page" was.
+   */
+  --surface: #fff;
+}
+
+.dark {
+  --neutral-50: oklch(19% 0.015 258); /* page background, recessed rows */
+  --neutral-100: oklch(26% 0.017 258); /* dividers, chips */
+  --neutral-200: oklch(31% 0.018 258); /* borders */
+  --neutral-300: oklch(38% 0.02 258); /* input borders, stronger rules */
+  --neutral-400: oklch(60% 0.03 257); /* faintest text — placeholders */
+  --neutral-500: oklch(70% 0.03 257); /* muted text, by far the most used */
+  --neutral-600: oklch(78% 0.025 257);
+  --neutral-700: oklch(86% 0.018 257); /* body copy */
+  --neutral-800: oklch(92% 0.012 257);
+  --neutral-900: oklch(96.5% 0.006 258); /* headings */
+  --neutral-950: oklch(99% 0.003 258);
+
+  /* Lighter than --neutral-50 on purpose: a card has to lift off the page. */
+  --surface: oklch(23.5% 0.016 258);
+}
+
+/*
+ * `inline` matters: without it Tailwind copies the variable's *value* into the
+ * utilities at build time and the runtime override above would do nothing.
+ */
+@theme inline {
+  --color-slate-50: var(--neutral-50);
+  --color-slate-100: var(--neutral-100);
+  --color-slate-200: var(--neutral-200);
+  --color-slate-300: var(--neutral-300);
+  --color-slate-400: var(--neutral-400);
+  --color-slate-500: var(--neutral-500);
+  --color-slate-600: var(--neutral-600);
+  --color-slate-700: var(--neutral-700);
+  --color-slate-800: var(--neutral-800);
+  --color-slate-900: var(--neutral-900);
+  --color-slate-950: var(--neutral-950);
+
+  --color-surface: var(--surface);
+}
+
 @theme {
   --color-brand-50: oklch(0.97 0.02 200);
   --color-brand-100: oklch(0.93 0.04 200);
@@ -26,6 +123,18 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    /*
+     * Tells the browser to draw its own furniture — scrollbars, the default
+     * <select> popup, date pickers, the flash before CSS applies — to match.
+     * Without it a dark page keeps a bright white scrollbar. Set as a property
+     * rather than via `dark:` so it also covers the OS-default case the inline
+     * script resolves.
+     */
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
@@ -42,6 +151,17 @@
   table {
     font-variant-numeric: tabular-nums;
   }
+
+  /*
+   * These are native controls, so `text-brand-600` on them does nothing — the
+   * checked fill comes from accent-color. Setting it once here means checkboxes
+   * match the brand in both themes; `color-scheme` above handles the unchecked
+   * box and its border.
+   */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--color-brand-600);
+  }
 }
 
 /*
@@ -54,8 +174,15 @@
 }
 
 @layer components {
+  /*
+   * Most of these need no `dark:` at all — they're built from the theme-aware
+   * neutral scale, so they follow automatically. The exceptions are the ones
+   * that mention `white` or an accent colour, and they're called out below.
+   */
   .card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-xs;
+    /* A drop shadow does nothing on a dark background; the lifted surface and
+       the border are what separate a card from the page there. */
+    @apply rounded-xl border border-slate-200 bg-surface shadow-xs dark:shadow-none;
   }
 
   .label {
@@ -63,14 +190,16 @@
   }
 
   .input {
-    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
-      text-slate-900 shadow-xs placeholder:text-slate-400
+    @apply block w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm
+      text-slate-900 shadow-xs placeholder:text-slate-400 dark:shadow-none
       focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none
+      dark:focus:border-brand-400
       disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500;
   }
 
   .input-error {
-    @apply border-red-400 focus:border-red-500 focus:ring-red-500/20;
+    @apply border-red-400 focus:border-red-500 focus:ring-red-500/20
+      dark:border-red-500/60 dark:focus:border-red-400;
   }
 
   .hint {
@@ -78,15 +207,19 @@
   }
 
   .field-error {
-    @apply mt-1.5 text-xs font-medium text-red-600;
+    @apply mt-1.5 text-xs font-medium text-red-600 dark:text-red-400;
   }
 
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800;
+    /* Brand-600 carries white text at the same contrast in either theme, so the
+       primary button is the one thing that doesn't change. */
+    @apply btn bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800
+      dark:hover:bg-brand-500 dark:active:bg-brand-400;
   }
 
   .btn-secondary {
-    @apply btn border border-slate-300 bg-white text-slate-700 shadow-xs hover:bg-slate-50;
+    @apply btn border border-slate-300 bg-surface text-slate-700 shadow-xs hover:bg-slate-50
+      dark:shadow-none dark:hover:bg-slate-100;
   }
 
   .btn-ghost {
@@ -94,7 +227,8 @@
   }
 
   .btn-danger {
-    @apply btn border border-red-200 bg-white text-red-700 hover:bg-red-50;
+    @apply btn border border-red-200 bg-surface text-red-700 hover:bg-red-50
+      dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10;
   }
 
   .th {
@@ -106,6 +240,6 @@
   }
 
   .link {
-    @apply font-medium text-brand-700 underline-offset-2 hover:underline;
+    @apply font-medium text-brand-700 underline-offset-2 hover:underline dark:text-brand-300;
   }
 }

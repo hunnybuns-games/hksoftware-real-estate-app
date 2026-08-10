@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { homeFor, liveSessionUser } from "@/lib/rbac";
 import { Logo } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
  * Doubles as the post-login landing spot: signed-in users get bounced to the
@@ -22,6 +23,7 @@ export default async function HomePage() {
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-5">
         <Logo />
         <nav className="flex items-center gap-2">
+          <ThemeToggle className="mr-1 hidden sm:inline-flex" />
           <Link href="/login" className="btn-ghost">
             Sign in
           </Link>
@@ -33,7 +35,7 @@ export default async function HomePage() {
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-6">
         <section className="pt-16 pb-14 sm:pt-24">
-          <p className="text-sm font-semibold text-brand-700">For 20–200 unit portfolios</p>
+          <p className="text-sm font-semibold text-brand-700 dark:text-brand-300">For 20–200 unit portfolios</p>
           <h1 className="mt-3 max-w-2xl text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
             Property management without the enterprise tax.
           </h1>

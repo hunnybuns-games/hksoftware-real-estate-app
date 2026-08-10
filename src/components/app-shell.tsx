@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Logo } from "@/components/logo";
 import { SignOutButton } from "@/components/sign-out-button";
 import { NavLink } from "@/components/nav-link";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export type NavItem = { href: string; label: string; badge?: number; exact?: boolean };
 
@@ -27,7 +28,7 @@ export function SidebarShell({
 }) {
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[16rem_1fr]">
-      <aside className="flex flex-col border-slate-200 bg-white lg:sticky lg:top-0 lg:h-dvh lg:border-r">
+      <aside className="flex flex-col border-slate-200 bg-surface lg:sticky lg:top-0 lg:h-dvh lg:border-r">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 lg:border-b-0">
           <Link href="/app">
             <Logo />
@@ -61,6 +62,7 @@ export function SidebarShell({
         >
           <p className="truncate text-sm font-medium text-slate-900">{user.name}</p>
           <p className="truncate text-xs text-slate-500">{orgName}</p>
+          <ThemeToggle className="mt-3" />
           <SignOutButton className="mt-3" />
         </div>
       </aside>
@@ -68,7 +70,10 @@ export function SidebarShell({
       <div className="flex min-w-0 flex-col">
         <div className="flex items-center justify-between gap-4 px-6 py-3 lg:hidden">
           <p className="truncate text-xs text-slate-500">{orgName}</p>
-          <SignOutButton />
+          <div className="flex shrink-0 items-center gap-2">
+            <ThemeToggle />
+            <SignOutButton />
+          </div>
         </div>
         <main className="min-w-0 flex-1 px-5 pt-4 pb-16 sm:px-8 sm:pt-8">
           <div className="mx-auto w-full max-w-6xl">{children}</div>
@@ -93,13 +98,16 @@ export function TopbarShell({
 }) {
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-surface/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-5 py-3.5">
           <Link href={homeHref} className="min-w-0">
             <span className="block truncate text-sm font-semibold text-slate-900">{orgName}</span>
             <span className="block truncate text-xs text-slate-500">{user.name}</span>
           </Link>
-          <SignOutButton />
+          <div className="flex shrink-0 items-center gap-2">
+            <ThemeToggle />
+            <SignOutButton />
+          </div>
         </div>
         <nav className="mx-auto flex w-full max-w-3xl gap-1 overflow-x-auto px-3 pb-2.5">
           {nav.map((item) => (

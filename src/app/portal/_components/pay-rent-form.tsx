@@ -73,7 +73,7 @@ export function PayRentForm({
         {stripeReady ? (
           <span className="text-xs text-slate-400">Secured by Stripe</span>
         ) : (
-          <span className="text-xs text-amber-700">Demo mode — no money moves</span>
+          <span className="text-xs text-amber-700 dark:text-amber-300">Demo mode — no money moves</span>
         )}
       </div>
     </div>
