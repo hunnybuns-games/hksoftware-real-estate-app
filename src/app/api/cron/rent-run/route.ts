@@ -1,5 +1,5 @@
-import { timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/db";
+import { isCronAuthorized } from "@/lib/cron-auth";
 import { computeBalance, generateRentCharges } from "@/lib/ledger";
 import { notifyRentDue, notifyRentLate } from "@/lib/notifications";
 import { daysBetweenUtc, startOfUtcDay } from "@/lib/dates";
@@ -23,7 +23,7 @@ export const maxDuration = 60;
 const REMINDER_LEAD_DAYS = 3;
 
 export async function GET(req: Request): Promise<Response> {
-  if (!isAuthorized(req)) {
+  if (!isCronAuthorized(req, "rent-run")) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -113,21 +113,3 @@ export async function GET(req: Request): Promise<Response> {
   return Response.json({ ranAt: today.toISOString(), organizations: results.length, results });
 }
 
-/**
- * Accepts either a bearer CRON_SECRET or Vercel's own cron header. Without a
- * configured secret the endpoint is refused outright rather than left open —
- * an unauthenticated rent run could be used to spam every tenant you have.
- */
-function isAuthorized(req: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    console.error("[cron] CRON_SECRET is not set; refusing to run");
-    return false;
-  }
-
-  const header = req.headers.get("authorization") ?? "";
-  const expected = `Bearer ${secret}`;
-  const a = Buffer.from(header);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}

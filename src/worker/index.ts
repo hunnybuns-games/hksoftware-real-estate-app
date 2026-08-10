@@ -22,12 +22,21 @@ export default {
    * developer curling the route by hand.
    */
   async scheduled(_event, env, ctx) {
-    const request = new Request("https://internal.invalid/api/cron/rent-run", {
-      headers: { Authorization: `Bearer ${env.CRON_SECRET ?? ""}` },
-    });
-    const response = await openNextWorker.fetch(request, env, ctx);
-    if (!response.ok) {
-      console.error(`Rent run cron failed: ${response.status} ${await response.text()}`);
+    // Two independent nightly jobs. Run sequentially and report separately so
+    // one failing doesn't hide the other's result — and don't let a thrown
+    // error from the first skip the second.
+    for (const path of ["/api/cron/rent-run", "/api/cron/bank-sync"]) {
+      try {
+        const request = new Request(`https://internal.invalid${path}`, {
+          headers: { Authorization: `Bearer ${env.CRON_SECRET ?? ""}` },
+        });
+        const response = await openNextWorker.fetch(request, env, ctx);
+        if (!response.ok) {
+          console.error(`Cron ${path} failed: ${response.status} ${await response.text()}`);
+        }
+      } catch (err) {
+        console.error(`Cron ${path} threw`, err);
+      }
     }
   },
 };

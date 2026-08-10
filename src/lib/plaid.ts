@@ -144,10 +144,18 @@ function toAppTransaction(t: PlaidRawTransaction): PlaidTransaction {
 export async function syncTransactions(args: {
   accessToken: string;
   cursor: string | null;
+  /**
+   * Transactions per page. Set this explicitly rather than taking Plaid's
+   * default — the caller's whole query budget is derived from it, since every
+   * transaction in a page costs database writes and D1 caps how many of those
+   * one request may make (see plaid-sync.ts).
+   */
+  count?: number;
 }): Promise<PlaidSyncResult> {
   const response = await getPlaid().transactionsSync({
     access_token: args.accessToken,
     cursor: args.cursor ?? undefined,
+    count: args.count,
   });
   return {
     added: response.data.added.map(toAppTransaction),

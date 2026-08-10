@@ -12,6 +12,7 @@ import {
   removeItem,
 } from "@/lib/plaid";
 import { decryptToken, encryptToken } from "@/lib/token-encryption";
+import { syncBankConnection } from "@/lib/plaid-sync";
 import { appUrl } from "@/lib/email";
 
 /**
@@ -91,6 +92,53 @@ export async function exchangeBankPublicTokenAction(publicToken: string): Promis
 
     revalidatePath("/app/settings/payments");
     return actionOk("Bank account connected.");
+  });
+}
+
+/**
+ * Sync on demand. Two reasons this exists rather than leaving everything to
+ * Plaid's webhook: it's the only practical way to trigger a sync in Sandbox
+ * (which doesn't generate transactions on its own), and a sync collects a
+ * bounded number of pages, so a freshly connected account with a long history
+ * needs more than one run. The nightly cron drains backlogs too — this is for
+ * when someone doesn't want to wait until tomorrow.
+ */
+export async function syncBankNowAction(_prev: ActionState): Promise<ActionState> {
+  return runAction(async () => {
+    const ctx = await assertAdmin();
+
+    const connection = await db.bankConnection.findUnique({
+      where: { organizationId: ctx.organizationId },
+      select: { id: true, status: true },
+    });
+    if (!connection) return actionError("No bank account is connected yet.");
+    if (connection.status === "LOGIN_REQUIRED") {
+      return actionError("Your bank needs you to sign in again before it will share new transactions.");
+    }
+
+    const outcome = await syncBankConnection(connection.id);
+
+    revalidatePath("/app/settings/payments");
+    revalidatePath("/app/payments");
+    revalidatePath("/app");
+
+    if (outcome.added === 0 && outcome.modified === 0 && outcome.removed === 0) {
+      return actionOk(
+        outcome.hasMore
+          ? "Checked — nothing new in what we've read so far, and there's more history still to collect. Run it again."
+          : "Checked — no new transactions.",
+      );
+    }
+
+    const parts = [
+      outcome.added > 0 ? `${outcome.added} new` : null,
+      outcome.modified > 0 ? `${outcome.modified} updated` : null,
+      outcome.removed > 0 ? `${outcome.removed} removed` : null,
+    ].filter(Boolean);
+
+    return actionOk(
+      `${parts.join(", ")}.${outcome.hasMore ? " There's more history to collect — run it again to continue." : ""}`,
+    );
   });
 }
 

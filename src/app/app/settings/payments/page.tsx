@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";
 import { refreshStripeStatusAction, startStripeOnboardingAction } from "@/actions/org";
-import { disconnectBankAction } from "@/actions/bank-connection";
+import { disconnectBankAction, syncBankNowAction } from "@/actions/bank-connection";
 import { stripeEnabled } from "@/lib/stripe";
 import { plaidEnabled } from "@/lib/plaid";
 import { Badge, Banner, Card, DescriptionList } from "@/components/ui";
@@ -202,12 +202,19 @@ export default async function PaymentSettingsPage({
                     }
                   />
                   {bankConnection ? (
-                    <ActionButton
-                      action={disconnectBankAction}
-                      label="Disconnect"
-                      pendingLabel="Disconnecting…"
-                      variant="danger"
-                    />
+                    <>
+                      <ActionButton
+                        action={syncBankNowAction}
+                        label="Sync now"
+                        pendingLabel="Syncing…"
+                      />
+                      <ActionButton
+                        action={disconnectBankAction}
+                        label="Disconnect"
+                        pendingLabel="Disconnecting…"
+                        variant="danger"
+                      />
+                    </>
                   ) : null}
                 </div>
               )}
