@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";
 import { updateOrgAction } from "@/actions/org";
@@ -15,7 +16,11 @@ export default async function OrgSettingsPage() {
     where: { id: ctx.organizationId },
     select: { name: true, graceDays: true, lateFeeCents: true, createdAt: true },
   });
-  if (!org) return null;
+  // requireStaff() already sends a session with no live organization to
+  // onboarding, so reaching here without one means the row vanished between
+  // that check and this query. Vanishingly unlikely — but `return null` renders
+  // a silently empty page, which is the worst possible way to report it.
+  if (!org) notFound();
 
   return (
     <div className="max-w-xl space-y-6">

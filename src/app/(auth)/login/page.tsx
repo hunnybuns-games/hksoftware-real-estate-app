@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { auth } from "@/lib/auth";
+import { liveSessionUser } from "@/lib/rbac";
 import { LoginForm } from "./_components/login-form";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -11,8 +11,11 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ next?: string }>;
 }) {
-  const session = await auth();
-  if (session?.user) redirect("/");
+  // Deliberately the database-backed check, not auth() — see liveSessionUser().
+  // Someone arriving here with a stale cookie needs the sign-in form, not a
+  // redirect back into the app that will only send them here again.
+  const user = await liveSessionUser();
+  if (user) redirect("/");
 
   const { next } = await searchParams;
 

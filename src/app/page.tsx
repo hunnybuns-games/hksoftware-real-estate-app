@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
-import { homeFor } from "@/lib/rbac";
+import { homeFor, liveSessionUser } from "@/lib/rbac";
 import { Logo } from "@/components/logo";
 
 /**
@@ -10,14 +9,12 @@ import { Logo } from "@/components/logo";
  * mapping.
  */
 export default async function HomePage() {
-  const session = await auth();
-  if (session?.user) {
-    redirect(
-      homeFor({
-        role: session.user.role,
-        organizationId: session.user.organizationId,
-      }),
-    );
+  // Database-backed, not auth() — a token naming a deleted account has to land
+  // on this marketing page rather than be routed into the app, or it ping-pongs
+  // with the guards forever. See liveSessionUser().
+  const user = await liveSessionUser();
+  if (user) {
+    redirect(homeFor({ role: user.role, organizationId: user.organizationId }));
   }
 
   return (

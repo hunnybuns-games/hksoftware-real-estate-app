@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -12,18 +13,82 @@ export type SessionUser = {
   tenantId: string | null;
 };
 
-/** Any signed-in user. Redirects to /login otherwise. */
-export async function requireUser(): Promise<SessionUser> {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+/**
+ * Reads the signed-in user's *current* state from the database rather than
+ * trusting what the session token says.
+ *
+ * Sessions here are stateless JWTs with a 30-day lifetime, so a token keeps
+ * asserting whatever was true when it was issued. Without this lookup:
+ *
+ *  - removing a team member didn't revoke anything — their existing login kept
+ *    full access to the organization they'd been removed from, for up to a
+ *    month;
+ *  - demoting an admin to staff didn't take effect until their token happened
+ *    to refresh;
+ *  - and a token naming an organization that no longer exists sailed through
+ *    every guard, leaving pages to render blank when their own queries came
+ *    back empty (which is exactly how this surfaced: two settings tabs going
+ *    silently empty after a database restore rolled past a signup).
+ *
+ * Wrapped in React's cache() so the several guard calls in one render — a
+ * layout and its page both calling requireStaff(), typically — collapse to a
+ * single query per request.
+ */
+const loadLiveUser = cache(async (userId: string): Promise<SessionUser | null> => {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      organizationId: true,
+      organization: { select: { id: true } },
+      tenant: { select: { id: true } },
+    },
+  });
+  if (!user) return null;
+
   return {
-    id: session.user.id,
-    email: session.user.email ?? "",
-    name: session.user.name ?? "",
-    role: session.user.role,
-    organizationId: session.user.organizationId,
-    tenantId: session.user.tenantId,
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    // The database is authoritative for both of these, not the token.
+    role: user.role,
+    // If the organization row is gone, report no organization rather than a
+    // dangling id. The guards below then route to onboarding, which is a
+    // recoverable state, instead of letting a page render nothing.
+    organizationId: user.organization ? user.organizationId : null,
+    tenantId: user.tenant?.id ?? null,
   };
+});
+
+/**
+ * The signed-in user as the database currently sees them, or null if nobody is
+ * signed in *or* the token names an account that no longer exists.
+ *
+ * Anything that *routes* on whether someone is signed in — the root page, the
+ * login page — must use this rather than calling auth() directly. If those
+ * pages decide from the raw token while the guards below decide from the
+ * database, the two disagree about a stale session and bounce redirects off
+ * each other indefinitely (/app → /login → / → /app → …). That loop is not
+ * hypothetical: it's what this returned before the helper existed.
+ */
+export async function liveSessionUser(): Promise<SessionUser | null> {
+  const session = await auth();
+  if (!session?.user?.id) return null;
+  return loadLiveUser(session.user.id);
+}
+
+/**
+ * Any signed-in user whose account still exists. Redirects to /login otherwise
+ * — which covers both "never signed in" and "signed in with a token whose user
+ * has since been deleted".
+ */
+export async function requireUser(): Promise<SessionUser> {
+  const live = await liveSessionUser();
+  if (!live) redirect("/login");
+  return live;
 }
 
 /**
@@ -126,21 +191,25 @@ export async function staffOrganizationIdForMetadata(): Promise<string | null> {
 /**
  * Server-action equivalents of the guards above. Actions must not `redirect()`
  * on an authorization failure — they return a field error instead.
+ *
+ * These matter more than the page guards, because they gate writes: a removed
+ * employee hitting a stale browser tab shouldn't just be unable to *read* the
+ * org, they shouldn't be able to edit a lease or void a payment either. Same
+ * database-backed check, same cached lookup.
  */
-export async function assertStaff(): Promise<StaffContext> {
+async function liveUserOrThrow(): Promise<SessionUser> {
   const session = await auth();
-  const u = session?.user;
-  if (!u?.id) throw new AuthorizationError("You need to sign in.");
+  if (!session?.user?.id) throw new AuthorizationError("You need to sign in.");
+  const live = await loadLiveUser(session.user.id);
+  if (!live) throw new AuthorizationError("Your account is no longer active. Please sign in again.");
+  return live;
+}
+
+export async function assertStaff(): Promise<StaffContext> {
+  const u = await liveUserOrThrow();
   if (u.role !== "ADMIN" && u.role !== "STAFF") throw new AuthorizationError();
   if (!u.organizationId) throw new AuthorizationError("No organization yet.");
-  return {
-    id: u.id,
-    email: u.email ?? "",
-    name: u.name ?? "",
-    role: u.role,
-    organizationId: u.organizationId,
-    tenantId: u.tenantId,
-  };
+  return { ...u, organizationId: u.organizationId };
 }
 
 export async function assertAdmin(): Promise<StaffContext> {
@@ -152,18 +221,9 @@ export async function assertAdmin(): Promise<StaffContext> {
 }
 
 export async function assertTenant(): Promise<TenantContext> {
-  const session = await auth();
-  const u = session?.user;
-  if (!u?.id) throw new AuthorizationError("You need to sign in.");
+  const u = await liveUserOrThrow();
   if (u.role !== "TENANT" || !u.tenantId) throw new AuthorizationError();
-  return {
-    id: u.id,
-    email: u.email ?? "",
-    name: u.name ?? "",
-    role: u.role,
-    organizationId: u.organizationId,
-    tenantId: u.tenantId,
-  };
+  return { ...u, tenantId: u.tenantId };
 }
 
 /**
@@ -171,9 +231,7 @@ export async function assertTenant(): Promise<TenantContext> {
  * routes, which need JSON error responses rather than a page redirect.
  */
 export async function assertOwner(): Promise<OwnerContext> {
-  const session = await auth();
-  const u = session?.user;
-  if (!u?.id) throw new AuthorizationError("You need to sign in.");
+  const u = await liveUserOrThrow();
   if (u.role !== "OWNER" || !u.organizationId) throw new AuthorizationError();
 
   const links = await db.propertyOwner.findMany({
@@ -182,12 +240,8 @@ export async function assertOwner(): Promise<OwnerContext> {
   });
 
   return {
-    id: u.id,
-    email: u.email ?? "",
-    name: u.name ?? "",
-    role: u.role,
+    ...u,
     organizationId: u.organizationId,
-    tenantId: u.tenantId,
     propertyIds: links.map((l) => l.propertyId),
   };
 }

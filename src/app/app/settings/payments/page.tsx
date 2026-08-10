@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";
 import { refreshStripeStatusAction, startStripeOnboardingAction } from "@/actions/org";
@@ -37,7 +38,8 @@ export default async function PaymentSettingsPage({
       },
     }),
   ]);
-  if (!org) return null;
+  // See the note in ../page.tsx — never render an empty page to report this.
+  if (!org) notFound();
 
   const isAdmin = ctx.role === "ADMIN";
   const ready = org.stripeChargesEnabled;

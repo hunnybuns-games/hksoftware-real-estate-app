@@ -134,6 +134,95 @@ await pageRedir.locator('button[type="submit"]').click();
 await pageRedir.waitForTimeout(1500);
 log("open-redirect via redirectTo is blocked", !pageRedir.url().includes("evil.example.com"), `hiddenField=${hiddenVal} finalUrl=${pageRedir.url()}`);
 
+// ------------------------------------------- SESSION REVOCATION ON REMOVAL
+// The most serious defect this suite has caught: sessions are stateless 30-day
+// JWTs, and the guards used to read role/organization straight from the token
+// without consulting the database — so removing a team member revoked nothing.
+// Their existing login kept full access to the org they'd been removed from
+// until the token expired. This walks the whole flow through the UI.
+{
+  const stamp = Date.now();
+  const adminEmail = `revoke-admin-${stamp}@example.com`;
+  const staffEmail = `revoke-staff-${stamp}@example.com`;
+
+  const adminCtx = await browser.newContext();
+  const admin = await adminCtx.newPage();
+  await admin.goto(`${BASE}/signup`);
+  await admin.locator('input[name="name"]').fill("Revoke Admin");
+  await admin.locator('input[name="organizationName"]').fill(`Revoke Org ${stamp}`);
+  await admin.locator('input[name="email"]').fill(adminEmail);
+  await admin.locator('input[name="password"]').fill("correct-horse-battery-R");
+  await admin.locator('button[type="submit"]').click();
+  await admin.waitForURL(/\/app/, { timeout: 20000 });
+
+  // Invite a staff member.
+  await admin.goto(`${BASE}/app/settings/team`, { waitUntil: "networkidle" });
+  const inviteForm = admin.locator('form:has(input[name="email"])').first();
+  await inviteForm.locator('input[name="name"]').fill("Doomed Staffer");
+  await inviteForm.locator('input[name="email"]').fill(staffEmail);
+  await inviteForm.locator('button[type="submit"]').click();
+  await admin.waitForTimeout(1800);
+
+  // Email doesn't leave the box locally — the invite link is in the outbox.
+  await admin.goto(`${BASE}/app/settings/outbox`, { waitUntil: "networkidle" });
+  const outbox = await admin.textContent("body");
+  const inviteLink = (outbox ?? "").match(/\/invite\/[A-Za-z0-9_-]+/)?.[0] ?? null;
+  log("invitation email records a usable invite link", Boolean(inviteLink));
+
+  if (inviteLink) {
+    const staffCtx = await browser.newContext();
+    const staff = await staffCtx.newPage();
+    await staff.goto(`${BASE}${inviteLink}`);
+    await staff.locator('input[name="name"]').fill("Doomed Staffer");
+    await staff.locator('input[name="password"]').fill("staffer-password-123");
+    await staff.locator('button[type="submit"]').click();
+    await staff.waitForTimeout(2500);
+
+    await staff.goto(`${BASE}/app/properties`, { waitUntil: "networkidle" });
+    const hadAccess = staff.url().includes("/app/properties");
+    log("invited staff can reach the app before removal", hadAccess, staff.url());
+
+    // Admin removes them, through the real UI action.
+    await admin.goto(`${BASE}/app/settings/team`, { waitUntil: "networkidle" });
+    const removeButton = admin
+      .locator('form:has(button:text-matches("Remove", "i"))')
+      .filter({ hasNot: admin.locator('button:text-matches("Revoke", "i")') })
+      .last()
+      .locator('button[type="submit"]');
+    const removable = await removeButton.count();
+    if (removable > 0) {
+      await removeButton.click();
+      await admin.waitForTimeout(2000);
+    }
+    // Re-navigate before asserting. The action revalidates server-side, but
+    // reading the DOM straight after the click can still see the pre-click
+    // render — which is how this check first "failed" against a database that
+    // had in fact been updated correctly.
+    await admin.goto(`${BASE}/app/settings/team`, { waitUntil: "networkidle" });
+    const teamAfter = await admin.textContent("body");
+    log("removed member no longer listed on the team page", !(teamAfter ?? "").includes(staffEmail));
+
+    // Same browser, same cookie, no re-login: access must be gone immediately.
+    await staff.goto(`${BASE}/app/properties`, { waitUntil: "networkidle" }).catch(() => {});
+    await staff.waitForTimeout(800);
+    log(
+      "removed member's existing session is revoked immediately",
+      !staff.url().includes("/app/properties"),
+      staff.url(),
+    );
+
+    // And the stale cookie must not ping-pong between the guards and the
+    // session-aware pages — a real regression introduced while fixing the above.
+    log(
+      "stale session lands on a usable sign-in page rather than a redirect loop",
+      staff.url().includes("/login"),
+      staff.url(),
+    );
+    await staffCtx.close();
+  }
+  await adminCtx.close();
+}
+
 await browser.close();
 
 const passed = results.filter((r) => r.ok).length;
