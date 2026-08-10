@@ -2,18 +2,28 @@ import { db } from "@/lib/db";
 import type { NotificationType } from "@prisma/client";
 
 /**
- * Email transport. Two modes:
+ * Email transport. Three modes, tried in this order:
  *
- *  - RESEND_API_KEY set  -> send for real over Resend's HTTP API (no SDK, no
- *                           SMTP, works on serverless without extra deps).
- *  - unset               -> "logged" mode. Nothing leaves the box; every
- *                           message is written to NotificationLog and visible
- *                           at /app/settings/outbox. This keeps local dev and
- *                           demos honest — you can see exactly what would have
- *                           been sent, in order.
+ *  1. Cloudflare Email Service — the `EMAIL` binding declared in wrangler.jsonc.
+ *     Preferred, because it keeps everything on the one account we already pay
+ *     for: no third-party signup, no API key to store or rotate, 3,000 sends a
+ *     month included. Two things gate it, and both are the account's, not the
+ *     code's: a sending domain onboarded to Email Service (with EMAIL_FROM on
+ *     it), and the Workers Paid plan. Until then it can only reach *verified
+ *     destination addresses* in the account, so this module treats a missing
+ *     EMAIL_FROM as "not configured" and falls through rather than burning a send
+ *     on a guaranteed rejection.
  *
- * Every send is recorded either way, which doubles as the audit trail a
- * landlord needs when a tenant claims they never got a rent notice.
+ *  2. Resend — if RESEND_API_KEY is set. Kept deliberately: it's the escape hatch
+ *     if Cloudflare's sending is unavailable, and it has the same domain
+ *     requirement, so switching providers is not a way to avoid that step.
+ *
+ *  3. "Logged" — nothing leaves the box. Every message is written to
+ *     NotificationLog and visible at /app/settings/outbox. This keeps local dev
+ *     and demos honest: you can see exactly what would have been sent, in order.
+ *
+ * Every send is recorded whichever mode is active, which doubles as the audit
+ * trail a landlord needs when a tenant claims they never got a rent notice.
  */
 
 export type SendEmailInput = {
@@ -26,7 +36,75 @@ export type SendEmailInput = {
   dedupeKey?: string;
 };
 
-const FROM = process.env.EMAIL_FROM || "notifications@example.com";
+/**
+ * The placeholder in .env.example. Treated as "unset": sending from
+ * @example.com is rejected by any provider, and failing over to the email log is
+ * a much better outcome than a log full of E_SENDER_DOMAIN_NOT_AVAILABLE.
+ */
+const PLACEHOLDER_FROM = "notifications@example.com";
+
+function configuredFrom(): string | null {
+  const from = process.env.EMAIL_FROM?.trim();
+  if (!from || from === PLACEHOLDER_FROM) return null;
+  return from;
+}
+
+/**
+ * Turns whatever a transport threw into something a landlord reading
+ * /app/settings/outbox can act on.
+ *
+ * Cloudflare's binding throws Errors carrying a `code`, and the two codes almost
+ * everyone hits first mean the same thing — "you haven't finished setting up a
+ * domain" — which is a configuration step, not a bug. Saying so in the log is the
+ * difference between a five-minute fix and an afternoon.
+ *
+ * Exported for tests: this is pure, and it's the part with the judgement in it.
+ */
+export function describeEmailError(err: unknown): string {
+  const code =
+    typeof err === "object" && err !== null && "code" in err
+      ? String((err as { code?: unknown }).code)
+      : null;
+  const message = err instanceof Error ? err.message : "unknown error";
+
+  const explanations: Record<string, string> = {
+    E_SENDER_NOT_VERIFIED:
+      "The sending domain isn't verified in Cloudflare yet. Onboard the domain in Email Service, then set EMAIL_FROM to an address on it.",
+    E_SENDER_DOMAIN_NOT_AVAILABLE:
+      "EMAIL_FROM uses a domain that isn't onboarded to Cloudflare Email Service. Until it is, sending only works to verified destination addresses in your account.",
+    E_RECIPIENT_NOT_ALLOWED:
+      "The EMAIL binding is restricted to specific recipients. Remove allowed_destination_addresses from wrangler.jsonc to mail residents.",
+    E_RECIPIENT_SUPPRESSED:
+      "This address is on Cloudflare's suppression list — it previously bounced or reported mail as spam. It needs removing there before sends will reach it.",
+    E_RATE_LIMIT_EXCEEDED: "Cloudflare's sending rate limit was hit. This send should be retried.",
+    E_DAILY_LIMIT_EXCEEDED:
+      "The account's daily sending quota is used up. New accounts start low and scale with sending history.",
+    E_CONTENT_TOO_LARGE: "The message is over the 5 MiB limit.",
+    E_TOO_MANY_RECIPIENTS: "Over 50 recipients across to/cc/bcc.",
+    E_INTERNAL_SERVER_ERROR: "Cloudflare Email Service was temporarily unavailable.",
+  };
+
+  const explanation = code ? explanations[code] : undefined;
+  if (code && explanation) return `${code}: ${explanation}`.slice(0, 500);
+  if (code) return `${code}: ${message}`.slice(0, 500);
+  return message.slice(0, 500);
+}
+
+/**
+ * The Cloudflare `EMAIL` binding, or null when there isn't one — local `next dev`
+ * has no Cloudflare bindings at all. Same lazy-inside-a-request pattern as the D1
+ * binding in src/lib/db.ts, for the same reason: bindings only resolve inside an
+ * active request on Workers.
+ */
+async function emailBinding(): Promise<SendEmail | null> {
+  if (process.env.USE_D1 !== "true") return null; // not running on Workers
+  try {
+    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
+    return getCloudflareContext().env.EMAIL ?? null;
+  } catch {
+    return null;
+  }
+}
 
 function htmlShell(subject: string, body: string): string {
   const paragraphs = body
@@ -52,9 +130,65 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export async function sendEmail(input: SendEmailInput): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
+type SendOutcome = { status: "SENT" | "LOGGED" } | { status: "FAILED"; error: string };
 
+/**
+ * Cloudflare Email Service. No MIME construction and no `mimetext` dependency —
+ * the structured builder takes `text` and `html` directly. (The older
+ * `EmailMessage` + raw-RFC-5322 API still exists; there's no reason to use it
+ * for mail we compose ourselves.)
+ */
+async function sendViaCloudflare(
+  binding: SendEmail,
+  from: string,
+  input: SendEmailInput,
+): Promise<SendOutcome> {
+  try {
+    await binding.send({
+      from,
+      to: input.to,
+      subject: input.subject,
+      text: input.body,
+      html: htmlShell(input.subject, input.body),
+    });
+    return { status: "SENT" };
+  } catch (err) {
+    return { status: "FAILED", error: describeEmailError(err) };
+  }
+}
+
+/** Resend's HTTP API directly — no SDK, so nothing to bundle into the isolate. */
+async function sendViaResend(
+  apiKey: string,
+  from: string,
+  input: SendEmailInput,
+): Promise<SendOutcome> {
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [input.to],
+        subject: input.subject,
+        text: input.body,
+        html: htmlShell(input.subject, input.body),
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      return { status: "FAILED", error: `${res.status} ${detail}`.slice(0, 500) };
+    }
+    return { status: "SENT" };
+  } catch (err) {
+    return { status: "FAILED", error: describeEmailError(err) };
+  }
+}
+
+export async function sendEmail(input: SendEmailInput): Promise<void> {
   // Idempotency: if this exact message was already handled, do nothing.
   if (input.dedupeKey) {
     const existing = await db.notificationLog.findUnique({
@@ -73,46 +207,23 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     dedupeKey: input.dedupeKey ?? null,
   };
 
-  if (!apiKey) {
+  const from = configuredFrom();
+  const binding = from ? await emailBinding() : null;
+  const resendKey = process.env.RESEND_API_KEY;
+
+  let outcome: SendOutcome;
+  if (from && binding) {
+    outcome = await sendViaCloudflare(binding, from, input);
+  } else if (from && resendKey) {
+    outcome = await sendViaResend(resendKey, from, input);
+  } else {
     if (process.env.NODE_ENV !== "production") {
       console.info(`[email:logged] to=${input.to} subject="${input.subject}"`);
     }
-    await record({ ...base, status: "LOGGED" });
-    return;
+    outcome = { status: "LOGGED" };
   }
 
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: FROM,
-        to: [input.to],
-        subject: input.subject,
-        text: input.body,
-        html: htmlShell(input.subject, input.body),
-      }),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      await record({
-        ...base,
-        status: "FAILED",
-        error: `${res.status} ${detail}`.slice(0, 500),
-      });
-      return;
-    }
-    await record({ ...base, status: "SENT" });
-  } catch (err) {
-    await record({
-      ...base,
-      status: "FAILED",
-      error: err instanceof Error ? err.message.slice(0, 500) : "unknown error",
-    });
-  }
+  await record({ ...base, ...outcome });
 }
 
 async function record(data: Parameters<typeof db.notificationLog.create>[0]["data"]) {

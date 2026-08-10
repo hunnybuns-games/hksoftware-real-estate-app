@@ -30,15 +30,23 @@ export default async function OutboxPage() {
     take: 100,
   });
 
-  const loggedOnly = !process.env.RESEND_API_KEY;
+  /*
+   * EMAIL_FROM is the honest signal, not the presence of a provider: with no
+   * verified sending address there is nothing any provider will accept, so the
+   * transport falls back to logging regardless (see src/lib/email.ts).
+   */
+  const from = process.env.EMAIL_FROM?.trim();
+  const loggedOnly = !from || from === "notifications@example.com";
 
   return (
     <div className="max-w-3xl space-y-6">
       {loggedOnly ? (
-        <Banner tone="warning" title="No email provider configured">
-          Nothing is actually being delivered. Messages are recorded here so you can see exactly
-          what would have gone out. Set <code className="rounded bg-white/60 px-1 dark:bg-white/10">RESEND_API_KEY</code>{" "}
-          and <code className="rounded bg-white/60 px-1 dark:bg-white/10">EMAIL_FROM</code> to start sending.
+        <Banner tone="warning" title="Email isn't being delivered yet">
+          Messages are recorded here so you can see exactly what would have gone out. To start
+          sending, add a domain to Cloudflare Email Service and set{" "}
+          <code className="rounded bg-white/60 px-1 dark:bg-white/10">EMAIL_FROM</code> to an
+          address on it. Sending to residents also needs the Workers Paid plan; before the domain
+          is set up, Cloudflare will only deliver to verified addresses in your own account.
         </Banner>
       ) : null}
 

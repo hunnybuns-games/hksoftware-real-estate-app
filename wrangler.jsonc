@@ -76,6 +76,35 @@
       "simple": { "limit": 5, "period": 60 }
     }
   ],
+  /**
+   * Outbound email, through Cloudflare Email Service rather than a third-party
+   * provider — one account, one bill, no API key to rotate. src/lib/email.ts
+   * prefers this binding and falls back to Resend, then to the in-app email log.
+   *
+   * Deliberately unrestricted. The optional `destination_address` /
+   * `allowed_destination_addresses` / `allowed_sender_addresses` attributes cap
+   * who a binding may mail, and capping recipients is wrong here: the recipients
+   * are tenants and owners, and we don't know them in advance.
+   *
+   * TWO THINGS GATE THIS AT RUNTIME, and until both are done the app quietly
+   * falls back to the email log instead of breaking (see src/lib/email.ts):
+   *
+   *   1. A sending domain onboarded to Email Service, and EMAIL_FROM set to an
+   *      address on it. Until then you can only send to *verified destination
+   *      addresses* in the account — your own inbox, which is fine for testing
+   *      but not for real residents. Errors as E_SENDER_DOMAIN_NOT_AVAILABLE.
+   *   2. The Workers Paid plan. Sending to arbitrary recipients isn't available
+   *      on Free at all; 3,000/month are included on Paid, then $0.35 per 1,000.
+   *
+   * Worth knowing before you go looking for a bug: mail sent through this binding
+   * shows up as **dropped** in the Email Routing summary even when it was
+   * delivered. Outbound sends are tracked under Email Sending metrics instead.
+   */
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
   "vars": {
     // Tells src/lib/db.ts to use the D1 binding above instead of a local
     // SQLite file. Not a secret — just a switch, so it's safe to keep in

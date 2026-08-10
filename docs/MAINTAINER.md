@@ -294,6 +294,42 @@ sends nothing extra. It checks a bearer token against `CRON_SECRET`. On Cloudfla
 is triggered by a native Cron Trigger (see `src/worker/index.ts`); it used to be Vercel
 Cron (`vercel.json`, no longer wired up but left in the repo).
 
+### Outbound email
+
+`src/lib/email.ts` picks one of three transports, in order:
+
+1. **Cloudflare Email Service**, via the `EMAIL` `send_email` binding in
+   `wrangler.jsonc`. The default, because it keeps everything on the account we already
+   pay for — no third-party signup, no API key to store or rotate, 3,000 sends a month
+   included and $0.35 per 1,000 after. It takes `text` and `html` directly, so there's no
+   MIME construction and no `mimetext` dependency.
+2. **Resend**, if `RESEND_API_KEY` is set. Kept as an escape hatch, not a recommendation.
+3. **Logged** — nothing is delivered; every message lands in `NotificationLog` and is
+   visible at `/app/settings/outbox`. This is the local-dev and demo default, and it's
+   what the e2e suites read invitation links out of.
+
+**`EMAIL_FROM` is the real switch, not the provider.** Unset (or left as the
+`notifications@example.com` placeholder) the transport goes straight to logging, because
+without a verified sending address there is nothing any provider will accept — trying
+anyway would just fill the log with `E_SENDER_DOMAIN_NOT_AVAILABLE`.
+
+Two account-level things gate real delivery, and switching providers avoids neither:
+
+- **A sending domain onboarded to Email Service.** Until then Cloudflare delivers only to
+  *verified destination addresses* in the account — your own inbox. Enough to test the
+  flow, not enough to mail a resident. Resend imposes the same requirement.
+- **The Workers Paid plan.** Sending to arbitrary recipients isn't available on Free at
+  all. Sends to verified destination addresses are free on any plan.
+
+`describeEmailError` translates Cloudflare's error codes into a next step before they're
+recorded, since the two anyone hits first (`E_SENDER_NOT_VERIFIED`,
+`E_SENDER_DOMAIN_NOT_AVAILABLE`) mean "finish setting up the domain" and read as a broken
+app otherwise. Unit-tested in `src/lib/__tests__/email.test.ts`.
+
+One trap worth knowing: mail sent through the binding appears as **dropped** in the Email
+Routing summary even when it was delivered fine. Outbound sends are tracked under Email
+Sending metrics instead.
+
 ## 9. File map
 
 | Path | What's there |

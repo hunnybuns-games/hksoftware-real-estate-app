@@ -68,7 +68,14 @@ pool to manage. See `src/lib/db.ts` for how that's wired.
    npx wrangler secret put BANK_TOKEN_ENCRYPTION_KEY    # required alongside the two above
    ```
 
-4. **Vars.** `wrangler.jsonc` already sets `USE_D1=true` (that's what tells
+4. **Email** (optional — the app records every message at `/app/settings/outbox` and works
+   fine without delivery). The `EMAIL` binding for Cloudflare Email Service is already in
+   `wrangler.jsonc`; to switch delivery on you need to onboard a domain to Email Service
+   and add `EMAIL_FROM` (an address on that domain) under `vars`. Mailing residents also
+   needs the Workers Paid plan — before the domain is set up Cloudflare will only deliver
+   to verified addresses in your own account. See docs/MAINTAINER.md §8.
+
+5. **Vars.** `wrangler.jsonc` already sets `USE_D1=true` (that's what tells
    `src/lib/db.ts` to use the D1 binding instead of a local SQLite file). Once you have a
    real domain, also add `AUTH_URL` / `APP_URL` under `vars`. If you're using the Plaid
    bank feed, add `PLAID_ENV="production"` under `vars` once you're off Sandbox (defaults
