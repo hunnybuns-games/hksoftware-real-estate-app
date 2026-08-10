@@ -38,7 +38,28 @@
     // SQLite file. Not a secret — just a switch, so it's safe to keep in
     // source. Left unset for local dev and for `prisma migrate`/`db seed`,
     // which always talk to a local SQLite file directly.
-    "USE_D1": "true"
+    "USE_D1": "true",
+
+    // The origin the app uses to build any link it hands to the outside world:
+    // invitation and notification emails (src/lib/email.ts appUrl()), Stripe's
+    // success/cancel return URLs, and the webhook URL registered with Plaid.
+    //
+    // Without it, appUrl() falls back to http://localhost:3000 — which is not a
+    // visible error, it's worse: invitation emails would carry unusable
+    // localhost links, and Plaid would be told to deliver webhooks to
+    // localhost, so a connected bank would simply never sync. Both would look
+    // like they had worked.
+    //
+    // Belongs here rather than in the dashboard: Workers Builds deploys by
+    // running `wrangler deploy`, which replaces the deployed vars with this
+    // block, so a dashboard-only value gets wiped on the next push. Update this
+    // line when you move to a custom domain.
+    //
+    // Deliberately no AUTH_URL: src/lib/auth.ts sets trustHost, so Auth.js
+    // derives its own URLs from the incoming request. That's strictly better
+    // here — it stays correct on workers.dev and on a custom domain without
+    // anyone remembering to change a second setting.
+    "APP_URL": "https://hksoftware-real-estate-app.hksoftware.workers.dev"
   }
   // Secrets (set with `npx wrangler secret put <NAME>`, never in this file):
   //   AUTH_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, CRON_SECRET,
