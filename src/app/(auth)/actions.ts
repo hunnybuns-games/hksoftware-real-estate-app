@@ -5,6 +5,7 @@ import { AuthError } from "next-auth";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { hashPassword, signIn } from "@/lib/auth";
+import { loginAttemptAllowed, signupAttemptAllowed } from "@/lib/rate-limit";
 import {
   type ActionState,
   actionError,
@@ -25,6 +26,13 @@ export async function loginAction(_prev: ActionState, formData: FormData): Promi
   return runAction(async () => {
     const parsed = parseForm(loginSchema, formData);
     if (!parsed.ok) return parsed.state;
+
+    // Before checking the password, not after — the point is to stop the
+    // guessing, and bcrypt verification is the expensive part an attacker would
+    // otherwise get to spend our CPU on.
+    if (!(await loginAttemptAllowed(parsed.data.email))) {
+      return actionError("Too many sign-in attempts. Wait a minute and try again.");
+    }
 
     try {
       // `redirectTo: "/"` sends everyone to the root, which then bounces them to
@@ -66,6 +74,11 @@ export async function signupAction(_prev: ActionState, formData: FormData): Prom
   return runAction(async () => {
     const parsed = parseForm(signupSchema, formData);
     if (!parsed.ok) return parsed.state;
+
+    if (!(await signupAttemptAllowed())) {
+      return actionError("Too many accounts created from here just now. Wait a minute and try again.");
+    }
+
     const { name, organizationName, email, password } = parsed.data;
 
     const existing = await db.user.findUnique({ where: { email }, select: { id: true } });

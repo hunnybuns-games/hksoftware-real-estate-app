@@ -94,10 +94,20 @@ await pageWeak.locator('button[type="submit"]').click();
 await pageWeak.waitForTimeout(1000);
 log("weak (short) password rejected", pageWeak.url().includes("/signup"), pageWeak.url());
 
-// Login brute-force: fire N rapid wrong-password attempts and see if anything throttles.
+// Login brute-force: fire more rapid wrong-password attempts than the limiter
+// allows (LOGIN_RATE_LIMIT is 10/60s in wrangler.jsonc) and look for the
+// throttle response.
+//
+// This is only a pass/fail assertion when running against a deployed Worker.
+// Locally there is no `ratelimit` binding at all, and src/lib/rate-limit.ts
+// fails open on purpose, so no throttle is the *correct* local behaviour — see
+// the note at the top of that file. Reporting it either way keeps the check
+// honest instead of quietly passing for the wrong reason.
+const ON_WORKERS = !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(BASE);
 const pageBrute = await (await browser.newContext()).newPage();
 let lastStatus = null;
-const attempts = 8;
+let throttled = false;
+const attempts = 14;
 const start = Date.now();
 for (let i = 0; i < attempts; i++) {
   await pageBrute.goto(`${BASE}/login`);
@@ -108,12 +118,18 @@ for (let i = 0; i < attempts; i++) {
     pageBrute.locator('button[type="submit"]').click(),
   ]);
   lastStatus = resp[0].status();
+  if (/too many sign-in attempts/i.test((await pageBrute.textContent("body")) ?? "")) {
+    throttled = true;
+    break;
+  }
 }
 const elapsedMs = Date.now() - start;
 log(
-  `no throttling observed after ${attempts} failed logins in ${elapsedMs}ms (informational, not pass/fail)`,
-  true,
-  `lastStatus=${lastStatus}`,
+  ON_WORKERS
+    ? `failed logins are throttled before ${attempts} attempts`
+    : `no throttling after ${attempts} failed logins in ${elapsedMs}ms (expected locally — limiter fails open with no binding)`,
+  ON_WORKERS ? throttled : true,
+  `throttled=${throttled} lastStatus=${lastStatus}`,
 );
 
 // Role boundary: a freshly signed-up ADMIN tries the tenant portal and owner dashboard directly.

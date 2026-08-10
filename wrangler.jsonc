@@ -46,6 +46,36 @@
       "database_id": "7b7e8815-d2f6-4de9-8948-b840936fadc4"
     }
   ],
+  /**
+   * Rate limiting for the two unauthenticated endpoints that are worth abusing.
+   * A security review confirmed eight rapid wrong-password attempts hit no
+   * throttle at all: bcrypt's cost slows an attacker but there is no lockout and
+   * no signal that it's happening.
+   *
+   * Cloudflare's zone-level WAF rate limiting needs a domain in your own account,
+   * which this deployment doesn't have yet (it's on workers.dev). This binding is
+   * the runtime equivalent and needs no custom domain, so it's available now.
+   *
+   * `period` only accepts 10 or 60 (wrangler's own config schema enforces it).
+   * namespace_id just has to be unique per limiter within the account.
+   */
+  "ratelimits": [
+    {
+      // Per-IP and per-email, checked separately — see src/lib/rate-limit.ts.
+      // 10/minute is far above what a person typing a password does and far
+      // below what a script needs to be useful.
+      "name": "LOGIN_RATE_LIMIT",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      // Tighter: signup is how someone floods the database with junk orgs, and
+      // nobody legitimately creates five accounts a minute.
+      "name": "SIGNUP_RATE_LIMIT",
+      "namespace_id": "1002",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ],
   "vars": {
     // Tells src/lib/db.ts to use the D1 binding above instead of a local
     // SQLite file. Not a secret — just a switch, so it's safe to keep in
