@@ -47,12 +47,15 @@ pool to manage. See `src/lib/db.ts` for how that's wired.
    Paste the returned `database_id` into `wrangler.jsonc`'s `d1_databases[0].database_id`
    (it ships with a placeholder).
 
-2. **Apply the schema to it** — this is the equivalent of `prisma migrate deploy` for D1:
+2. **Apply the schema to it:**
    ```
-   npx wrangler d1 execute hksoftware-real-estate-db --remote \
-     --file=./prisma/migrations/<latest migration folder>/migration.sql
+   npm run cf:migrate
    ```
-   Re-run this (with the new migration's file) any time you add a schema change.
+   This syncs `prisma/migrations/` into the flat layout Wrangler wants and applies
+   anything outstanding. Wrangler records what it has run in a `d1_migrations` table
+   inside the database, so it's safe to re-run — and it's the same command any time you
+   add a schema change, or to rebuild the schema after a bad restore. `npm run
+   cf:migrations:status` shows applied vs outstanding.
 
 3. **Secrets** (never committed — set once per environment):
    ```

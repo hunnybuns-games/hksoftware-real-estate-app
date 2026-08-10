@@ -23,7 +23,12 @@
     "cf:build": "prisma generate && opennextjs-cloudflare build",
     "cf:preview": "npm run cf:build && opennextjs-cloudflare preview",
     "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy",
-    "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+    "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "cf:migrations:sync": "node scripts/sync-d1-migrations.mjs",
+    "cf:migrations:check": "node scripts/sync-d1-migrations.mjs --check",
+    "cf:migrate": "npm run cf:migrations:sync && wrangler d1 migrations apply hksoftware-real-estate-db --remote",
+    "cf:migrate:local": "npm run cf:migrations:sync && wrangler d1 migrations apply hksoftware-real-estate-db --local",
+    "cf:migrations:status": "wrangler d1 migrations list hksoftware-real-estate-db --remote"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

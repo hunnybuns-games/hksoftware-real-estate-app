@@ -436,12 +436,12 @@ in the bundling step.
   `*.workers.dev` URL. This also blocks zone-level Cloudflare features (rate limiting
   rules, bot protection, WAF) which need a domain in your own account.
 - **Stripe is optional**, by design, not an oversight — see §5 and `docs/payments.md`.
-- **No migration tracking on D1.** Migrations are applied by hand with `wrangler d1
-  execute` (§14), so nothing records which have already run — there's no
-  `_prisma_migrations` table on the production database and no way to ask it what version
-  it's on. This has already caused one production crash: a schema change shipped without
-  its migration being applied, and the page querying the new table threw on every load.
-  Every future schema change carries the same risk until this is fixed.
+- **Point-in-time restore takes the schema with it.** D1's Time Travel restores the whole
+  database, structure included — so restoring to a bookmark from before a migration ran
+  drops those tables, not just their rows. That's how a production database ended up with
+  no tables at all, which reads as "login is broken and signup doesn't work". Recovery is
+  `npm run cf:migrate` (§14). Never rehearse a restore against the real database; use a
+  throwaway one.
 - **The Plaid bank feed (§5) has never completed a live Sandbox connect-and-sync.** It was
   built and unit-tested with real logic/crypto but no live network access to Plaid at all
   (the build session's network policy blocked Plaid's API and CDN hosts outright). Do the
@@ -480,11 +480,24 @@ in the bundling step.
 ### Add a schema change
 
 ```
-# edit prisma/schema.prisma, then:
-npx prisma migrate dev --name describe_the_change
-# review the generated SQL in prisma/migrations/ before committing —
-# data backfills for existing rows are not automatic
+# 1. edit prisma/schema.prisma, then:
+npm run db:migrate -- --name describe_the_change
+
+# 2. project it into the layout Wrangler applies from, and commit both:
+npm run cf:migrations:sync
+
+# review the generated SQL before committing — data backfills for existing
+# rows are not automatic
 ```
+
+Both `prisma/migrations/<timestamp>_<name>/migration.sql` **and**
+`migrations/<timestamp>_<name>.sql` are committed. Prisma is what you author with;
+the flat copy is what Wrangler applies. `npm run cf:migrations:check` runs in CI and
+fails if they drift, so you can't ship one without the other.
+
+Never edit a migration that has already been applied. Wrangler identifies applied
+migrations by filename, so an edit is never re-run — production keeps the old schema
+with no warning. The sync script refuses this outright; add a new migration instead.
 
 ### Reseed local demo data
 
@@ -503,16 +516,25 @@ git push origin claude/property-management-mvp-gjlizb
 ### Run migrations against production
 
 D1 doesn't take `prisma migrate deploy` — there's no connection string to point it at.
-Apply the generated SQL directly with Wrangler instead:
+Wrangler applies them instead, and keeps a ledger of what it has already run in a
+`d1_migrations` table inside the database:
 
 ```
-npx wrangler d1 execute hksoftware-real-estate-db --remote \
-  --file=./prisma/migrations/<latest migration folder>/migration.sql
+npm run cf:migrations:status     # what's applied vs outstanding
+npm run cf:migrate               # sync from Prisma, then apply what's missing
 ```
 
-Requires Cloudflare auth (`npx wrangler login`, or `CLOUDFLARE_API_TOKEN`). Review the
-SQL first — same caveat as local migrations: data backfills for existing rows aren't
-automatic.
+Safe to re-run — anything already applied is skipped ("No migrations to apply!").
+Requires Cloudflare auth (`npx wrangler login`, or `CLOUDFLARE_API_TOKEN`).
+
+`npm run cf:migrate:local` does the same against the local Miniflare D1, which is a
+good way to rehearse a migration before it touches production.
+
+> **This replaced applying SQL by hand**, which had no record of what had run. That
+> gap cost real downtime twice: once when a deployed page queried a table that was
+> never created, and once when a point-in-time restore rolled the schema away and
+> recovery meant hand-writing a rescue script. With the ledger, recovery is just
+> `npm run cf:migrate`.
 
 ### Add a new secret
 

@@ -36,6 +36,14 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+      # Proves migrations/ (what Wrangler applies to production) still matches
+      # prisma/migrations (what you author). Also refuses an already-synced
+      # migration that's been edited — Wrangler tracks by filename, so an edit
+      # would never be re-applied and production would silently keep the old
+      # schema.
+      - name: D1 migrations are in step with Prisma
+        run: npm run cf:migrations:check
+
       # The real production build path, not just `next build` — this is what
       # catches things that only break once OpenNext bundles for workerd
       # (a Node-only API reaching into a Worker isolate, most often).

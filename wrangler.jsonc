@@ -19,6 +19,19 @@
   "triggers": {
     "crons": ["0 13 * * *"]
   },
+  // Schema changes go through `npm run cf:migrate`, which runs
+  // `wrangler d1 migrations apply` against the files in migrations/ — generated
+  // from prisma/migrations by npm run cf:migrations:sync. Prisma is still what
+  // you author with; that's just the flat layout Wrangler wants.
+  //
+  // Using Wrangler's migration command rather than pasting SQL into a console is
+  // the point: it keeps a ledger of what's already been applied *in the database*,
+  // which is exactly what was missing when a deployed page queried a table that
+  // had never been created.
+  //
+  // No migrations_dir key here on purpose — "migrations" is already Wrangler's
+  // default, and setting it explicitly is rejected as an unknown top-level field
+  // by wrangler 4.118.
   "d1_databases": [
     {
       "binding": "DB",
