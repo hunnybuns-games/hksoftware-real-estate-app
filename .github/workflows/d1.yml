@@ -30,6 +30,7 @@ on:
           - tables # read-only: list the tables that actually exist
           - schema # read-only: dump the full schema, to diff against the migrations
           - peek # read-only: counts + most recent Organizations/Users, to see if signups are landing
+          - repro-signup # runs signupAction's exact DB calls from plain Node — see scripts/d1-repro-signup.mjs
           - apply # apply outstanding migrations (backs up first)
           - backup # export the database and attach it to this run
           - repair-ledger # one-off: record the two hand-applied migrations (see scripts/d1-repair-ledger.sql)
@@ -179,6 +180,28 @@ jobs:
             run_sql "SELECT id, email, role, organizationId, createdAt, lastLoginAt FROM User ORDER BY createdAt DESC LIMIT 8;"
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Runs signupAction's exact two database calls from plain Node against
+      # the real production database, over the D1 REST API rather than through
+      # the Worker binding — no Worker involved, so nothing here is behind
+      # Cloudflare Access, and nothing here catches the exception the way
+      # runAction() does in the app. Whatever actually throws prints in full.
+      #
+      # Needs the Node-targeted Prisma client generated first — `npm ci` alone
+      # doesn't run codegen, and this step imports @prisma/client directly, not
+      # through src/lib/db.ts's runtime switch.
+      - name: Reproduce signup against the real database
+        if: env.ACTION == 'repro-signup'
+        env:
+          CLOUDFLARE_DATABASE_ID: 7b7e8815-d2f6-4de9-8948-b840936fadc4
+        run: |
+          # Without pipefail, `set -e` only sees `tee`'s exit code (always 0),
+          # so a real repro failure would show green here — exactly the wrong
+          # signal for a diagnostic whose entire purpose is to distinguish
+          # "throws" from "doesn't."
+          set -o pipefail
+          npx prisma generate
+          node scripts/d1-repro-signup.mjs 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Back up the database
         if: env.ACTION == 'apply' || env.ACTION == 'backup' || env.ACTION == 'repair-ledger'
