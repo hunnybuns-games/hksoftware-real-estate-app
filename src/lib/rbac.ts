@@ -117,12 +117,12 @@ export async function requireStaff(): Promise<StaffContext> {
   return { ...user, organizationId: user.organizationId };
 }
 
-/** ADMIN only — team management, Stripe connection, org settings. */
-export async function requireAdmin(): Promise<StaffContext> {
-  const ctx = await requireStaff();
-  if (ctx.role !== "ADMIN") redirect("/app");
-  return ctx;
-}
+// There is deliberately no requireAdmin() page guard. Admin-only *screens*
+// don't exist: settings, team and payments all use requireStaff() and then
+// render read-only for a STAFF viewer (see `isAdmin` / `readOnly` in those
+// pages), so staff can see the configuration they work under without being
+// able to change it. Admin is enforced on the writes instead, by assertAdmin()
+// below — which is the boundary that actually matters.
 
 export type TenantContext = SessionUser & { tenantId: string };
 

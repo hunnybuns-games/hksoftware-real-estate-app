@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { chunked } from "@/lib/chunk";
 import { assertStaff, AuthorizationError, NotFoundError } from "@/lib/rbac";
 import { type ActionState, actionError, actionOk, parseForm, runAction } from "@/lib/forms";
 import { MAX_IMPORT_CSV_BYTES, MAX_IMPORT_ROWS } from "@/lib/constants";
@@ -13,6 +14,9 @@ import { applyColumnMapping, guessColumnMapping, type ColumnMapping } from "@/li
 import { applyReconciliation } from "@/lib/reconciliation";
 
 const IMPORT_SOURCES = ["IMPORT_BANK", "IMPORT_VENMO", "IMPORT_CASHAPP", "IMPORT_HAP"] as const;
+
+/** See the comment at the createMany call in confirmImportAction. */
+const PAYMENT_INSERT_CHUNK = 6;
 
 const uploadSchema = z.object({
   source: z.enum(IMPORT_SOURCES),
@@ -196,31 +200,37 @@ export async function confirmImportAction(
 
     const affectedLeaseIds = new Set<string>();
 
-    // Not wrapped in $transaction — D1 doesn't support interactive
-    // transactions and throws outright if asked to. Sequential calls run
-    // exactly as they always did on this database (the old wrapper's
-    // commit/rollback were no-ops here anyway).
-    for (const row of importableRows) {
+    const paymentRows = importableRows.map((row) => {
       const chosen = formData.get(`lease_${row.rowIndex}`);
       const leaseId =
         typeof chosen === "string" && chosen !== "" && validLeaseIds.has(chosen) ? chosen : null;
       if (leaseId) affectedLeaseIds.add(leaseId);
 
-      await db.payment.create({
-        data: {
-          organizationId: ctx.organizationId,
-          leaseId,
-          amountCents: row.amountCents!,
-          status: "SUCCEEDED",
-          source: batch.source,
-          reconciliationStatus: leaseId ? "MATCHED" : "UNMATCHED",
-          paidAt: row.date!,
-          memo: row.description || null,
-          payerNameRaw: row.payerRaw || null,
-          externalRef: row.externalRef,
-          importBatchId: batch.id,
-        },
-      });
+      return {
+        organizationId: ctx.organizationId,
+        leaseId,
+        amountCents: row.amountCents!,
+        status: "SUCCEEDED" as const,
+        source: batch.source,
+        reconciliationStatus: leaseId ? ("MATCHED" as const) : ("UNMATCHED" as const),
+        paidAt: row.date!,
+        memo: row.description || null,
+        payerNameRaw: row.payerRaw || null,
+        externalRef: row.externalRef,
+        importBatchId: batch.id,
+      };
+    });
+
+    // Batched rather than one INSERT per row: a bank export is routinely
+    // hundreds of rows, and each round trip to D1 is a network hop the admin
+    // waits on. Not wrapped in $transaction — D1 doesn't support interactive
+    // transactions and throws outright if asked to (the old wrapper's
+    // commit/rollback were no-ops on this database anyway).
+    //
+    // 6 rows × 11 columns is 66 bound parameters, under D1's cap of 100 — the
+    // same budget as the Payment inserts in src/lib/plaid-sync.ts.
+    for (const chunk of chunked(paymentRows, PAYMENT_INSERT_CHUNK)) {
+      await db.payment.createMany({ data: chunk });
     }
 
     await db.paymentImportBatch.update({

@@ -213,7 +213,7 @@ async function sendViaResend(
   }
 }
 
-export async function sendEmail(input: SendEmailInput): Promise<void> {
+async function sendEmail(input: SendEmailInput): Promise<void> {
   // Idempotency: if this exact message was already handled, do nothing.
   if (input.dedupeKey) {
     const existing = await db.notificationLog.findUnique({

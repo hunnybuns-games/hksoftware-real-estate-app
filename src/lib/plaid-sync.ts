@@ -1,14 +1,14 @@
 import { db } from "@/lib/db";
+import { chunked } from "@/lib/chunk";
 import { syncTransactions, type PlaidTransaction } from "@/lib/plaid";
 import { decryptToken } from "@/lib/token-encryption";
 import { suggestLeaseMatch, type MatchableLease } from "@/lib/lease-matching";
 import { applyReconciliation } from "@/lib/reconciliation";
 
 /**
- * D1 accepts at most 100 bound parameters in a single query. Everything below
- * is sized against that ceiling, and none of these numbers are arbitrary — a
- * larger value doesn't get slower, it fails outright with "too many SQL
- * variables".
+ * Sized against D1's ceiling of 100 bound parameters per query (see
+ * src/lib/chunk.ts). None of these numbers are arbitrary — a larger value
+ * doesn't get slower, it fails outright with "too many SQL variables".
  *
  *  - INSERT_CHUNK: a Payment row writes ~13 columns, so 6 rows is ~78
  *    parameters. Prisma emits createMany as one multi-row INSERT, so the row
@@ -42,12 +42,6 @@ export type SyncOutcome = {
 };
 
 type PaymentCreateData = ReturnType<typeof toPaymentData>;
-
-function chunked<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out;
-}
 
 /**
  * Money leaving the account (a debit) is never a rent payment — see the

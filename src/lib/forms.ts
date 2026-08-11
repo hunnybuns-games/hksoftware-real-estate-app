@@ -19,7 +19,7 @@ export function actionOk(message?: string): ActionState {
 }
 
 /** Flattens a Zod error into one message per field, first message wins. */
-export function fieldErrorsFrom(error: z.ZodError): Record<string, string> {
+function fieldErrorsFrom(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of error.issues) {
     const key = issue.path.join(".") || "_";

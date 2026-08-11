@@ -1,12 +1,13 @@
 import { db } from "@/lib/db";
+import { chunked } from "@/lib/chunk";
 import {
   addUtcMonths,
   daysBetweenUtc,
+  formatMonth,
   rentDueDateFor,
   startOfUtcDay,
   startOfUtcMonth,
 } from "@/lib/dates";
-import { formatMonth } from "@/lib/dates";
 import type { Charge, Lease, Payment, PaymentStatus } from "@prisma/client";
 
 /**
@@ -97,13 +98,105 @@ export function computeBalance({
 }
 
 /**
+ * A RENT charge writes 6 columns, so 16 rows is 96 bound parameters — just
+ * under D1's ceiling of 100. Prisma emits createMany as a single multi-row
+ * INSERT, so the row count is what has to stay bounded. See src/lib/chunk.ts.
+ */
+const CHARGE_INSERT_CHUNK = 16;
+
+/** The minimum a lease has to tell us to decide what it owes. */
+export type BillableLease = Pick<
+  Lease,
+  "id" | "startDate" | "endDate" | "rentAmountCents" | "rentDueDay"
+>;
+
+export type PendingRentCharge = {
+  leaseId: string;
+  type: "RENT";
+  amountCents: number;
+  dueDate: Date;
+  periodStart: Date;
+  description: string;
+};
+
+/** The idempotency key a Charge row occupies, as `pendingRentCharges` reads it. */
+export function billedPeriodKey(leaseId: string, periodStart: Date | null): string {
+  return `${leaseId}|${periodStart?.getTime() ?? ""}`;
+}
+
+/**
+ * Which RENT charges are missing — the whole of the billing rulebook, and no
+ * database access, so every rule below is unit testable the same way
+ * computeBalance is. `generateRentCharges` is then just the I/O around it.
+ *
+ * The rules, in one place:
+ *  - one charge per calendar month from the lease's start month through the
+ *    month containing `asOf`;
+ *  - never earlier than `maxMonthsBack` months before that, so onboarding a
+ *    years-old lease doesn't post five years of history;
+ *  - never past the month the lease ended;
+ *  - nothing for a lease with no rent;
+ *  - nothing for a period already in `alreadyBilled`.
+ */
+export function pendingRentCharges(input: {
+  leases: BillableLease[];
+  /** Keys from `billedPeriodKey` for periods already on the books. */
+  alreadyBilled: ReadonlySet<string>;
+  asOf: Date;
+  maxMonthsBack: number;
+}): PendingRentCharge[] {
+  const currentPeriod = startOfUtcMonth(input.asOf);
+  const earliestPeriod = addUtcMonths(currentPeriod, -input.maxMonthsBack);
+  const out: PendingRentCharge[] = [];
+
+  for (const lease of input.leases) {
+    if (lease.rentAmountCents <= 0) continue;
+
+    const leaseStartPeriod = startOfUtcMonth(lease.startDate);
+    let period =
+      leaseStartPeriod.getTime() > earliestPeriod.getTime() ? leaseStartPeriod : earliestPeriod;
+
+    while (period.getTime() <= currentPeriod.getTime()) {
+      // Don't bill months after the lease ended.
+      if (lease.endDate && period.getTime() > startOfUtcMonth(lease.endDate).getTime()) break;
+
+      if (!input.alreadyBilled.has(billedPeriodKey(lease.id, period))) {
+        // The charge is created as soon as its month begins, even if the due day
+        // hasn't arrived — tenants should be able to pay early, and staff should
+        // see the month's rent on the books from the 1st. Lateness is decided by
+        // dueDate + graceDays in computeBalance, not by when the charge appeared.
+        out.push({
+          leaseId: lease.id,
+          type: "RENT",
+          amountCents: lease.rentAmountCents,
+          dueDate: rentDueDateFor(period, lease.rentDueDay),
+          periodStart: period,
+          description: `Rent — ${formatMonth(period)}`,
+        });
+      }
+
+      period = addUtcMonths(period, 1);
+    }
+  }
+
+  return out;
+}
+
+/**
  * Creates the RENT charge for every active lease for each month from the lease
- * start (or `from`) through the current month. Idempotent: the
+ * start through the current month. Idempotent: the
  * (leaseId, type, periodStart) unique constraint means running this twice — or
  * twice concurrently — cannot double-bill.
  *
  * Called from the cron endpoint (/api/cron/rent-run) and from the "Run rent"
  * button in the app, so a landlord is never blocked waiting for a scheduler.
+ *
+ * Reads which periods are already billed up front rather than discovering it
+ * one failed INSERT at a time. That ordering matters more than it looks: the
+ * common case by far is a run where every period is already billed, and the
+ * previous shape spent one round trip per (lease × month) to learn that — ~340
+ * of them for a 28-lease portfolio, every one a unique-violation that was
+ * caught and thrown away. Now that case costs a single read and no writes.
  */
 export async function generateRentCharges(options: {
   organizationId: string;
@@ -112,9 +205,8 @@ export async function generateRentCharges(options: {
   maxMonthsBack?: number;
 }): Promise<{ created: number; leasesProcessed: number }> {
   const asOf = options.asOf ?? new Date();
-  const currentPeriod = startOfUtcMonth(asOf);
   const maxMonthsBack = options.maxMonthsBack ?? 12;
-  const earliestPeriod = addUtcMonths(currentPeriod, -maxMonthsBack);
+  const earliestPeriod = addUtcMonths(startOfUtcMonth(asOf), -maxMonthsBack);
 
   const leases = await db.lease.findMany({
     where: { organizationId: options.organizationId, status: "ACTIVE" },
@@ -127,43 +219,46 @@ export async function generateRentCharges(options: {
     },
   });
 
+  // Scoped through the lease relation rather than `leaseId: { in: [...] }`:
+  // an id list would spend one bound parameter per lease and blow D1's cap of
+  // 100 on a portfolio this query most needs to be fast for.
+  const existing = await db.charge.findMany({
+    where: {
+      type: "RENT",
+      periodStart: { gte: earliestPeriod },
+      lease: { organizationId: options.organizationId, status: "ACTIVE" },
+    },
+    select: { leaseId: true, periodStart: true },
+  });
+
+  const toCreate = pendingRentCharges({
+    leases,
+    alreadyBilled: new Set(existing.map((c) => billedPeriodKey(c.leaseId, c.periodStart))),
+    asOf,
+    maxMonthsBack,
+  });
+
   let created = 0;
 
-  for (const lease of leases) {
-    if (lease.rentAmountCents <= 0) continue;
-
-    const leaseStartPeriod = startOfUtcMonth(lease.startDate);
-    let period =
-      leaseStartPeriod.getTime() > earliestPeriod.getTime() ? leaseStartPeriod : earliestPeriod;
-
-    while (period.getTime() <= currentPeriod.getTime()) {
-      // Don't bill months after the lease ended.
-      if (lease.endDate && period.getTime() > startOfUtcMonth(lease.endDate).getTime()) break;
-
-      // The charge is created as soon as its month begins, even if the due day
-      // hasn't arrived — tenants should be able to pay early, and staff should
-      // see the month's rent on the books from the 1st. Lateness is decided by
-      // dueDate + graceDays in computeBalance, not by when the charge appeared.
-      const dueDate = rentDueDateFor(period, lease.rentDueDay);
-
-      try {
-        await db.charge.create({
-          data: {
-            leaseId: lease.id,
-            type: "RENT",
-            amountCents: lease.rentAmountCents,
-            dueDate,
-            periodStart: period,
-            description: `Rent — ${formatMonth(period)}`,
-          },
-        });
-        created += 1;
-      } catch (err) {
-        // P2002 = unique violation = this period is already billed. Expected.
-        if (!isUniqueViolation(err)) throw err;
+  for (const chunk of chunked(toCreate, CHARGE_INSERT_CHUNK)) {
+    try {
+      const result = await db.charge.createMany({ data: chunk });
+      created += result.count;
+    } catch (err) {
+      // A concurrent run billed one of these periods between our read and this
+      // write. The unique constraint — not the read above — is what actually
+      // prevents double-billing, and a rejected multi-row INSERT writes none of
+      // its rows, so retrying the chunk one row at a time is safe and settles
+      // exactly which periods were genuinely still missing.
+      if (!isUniqueViolation(err)) throw err;
+      for (const row of chunk) {
+        try {
+          await db.charge.create({ data: row });
+          created += 1;
+        } catch (rowErr) {
+          if (!isUniqueViolation(rowErr)) throw rowErr;
+        }
       }
-
-      period = addUtcMonths(period, 1);
     }
   }
 
@@ -210,12 +305,4 @@ export async function getLeaseLedger(leaseId: string, organizationId: string) {
       graceDays: lease.organization.graceDays,
     }),
   };
-}
-
-/**
- * What a tenant still owes right now, oldest charge first. Drives the "Pay
- * rent" amount in the portal.
- */
-export function amountDueNow(balance: LeaseBalance): number {
-  return Math.max(0, balance.balanceCents);
 }

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { assertAdmin, assertStaff, AuthorizationError } from "@/lib/rbac";
+import { assertAdmin, AuthorizationError } from "@/lib/rbac";
 import {
   type ActionState,
   actionError,
@@ -168,9 +168,4 @@ export async function refreshStripeStatusAction(_prev: ActionState): Promise<Act
         : "Stripe still needs more information before this account can accept payments.",
     );
   });
-}
-
-/** Belt-and-braces guard used by pages that only staff should reach. */
-export async function ensureStaff(): Promise<void> {
-  await assertStaff();
 }

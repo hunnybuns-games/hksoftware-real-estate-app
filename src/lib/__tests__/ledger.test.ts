@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { computeBalance } from "@/lib/ledger";
+import {
+  type BillableLease,
+  billedPeriodKey,
+  computeBalance,
+  pendingRentCharges,
+} from "@/lib/ledger";
 import { utcDate } from "@/lib/dates";
 import { parseDollarsToCents, formatCents } from "@/lib/money";
 
@@ -168,6 +173,131 @@ describe("computeBalance", () => {
       asOf: utcDate(2026, 7, 2),
     });
     expect(b.isLate).toBe(true);
+  });
+});
+
+/**
+ * What gets billed, to whom, for which month. A bug here either double-bills a
+ * resident or silently fails to bill them, and neither shows up until someone
+ * reads a statement — so the rules are pinned down directly.
+ */
+describe("pendingRentCharges", () => {
+  const lease = (over: Partial<BillableLease> = {}): BillableLease => ({
+    id: "lease-1",
+    startDate: utcDate(2026, 6, 1),
+    endDate: null,
+    rentAmountCents: 180_000,
+    rentDueDay: 1,
+    ...over,
+  });
+
+  const run = (
+    leases: BillableLease[],
+    alreadyBilled: string[] = [],
+    asOf = utcDate(2026, 8, 11),
+    maxMonthsBack = 12,
+  ) =>
+    pendingRentCharges({
+      leases,
+      alreadyBilled: new Set(alreadyBilled),
+      asOf,
+      maxMonthsBack,
+    });
+
+  const periods = (rows: { periodStart: Date }[]) =>
+    rows.map((r) => r.periodStart.toISOString().slice(0, 7));
+
+  it("bills one charge per month from the lease start through the current month", () => {
+    // Starts June, asOf is mid-August: June, July, August. The current month is
+    // billed on the 1st even though the month isn't over.
+    expect(periods(run([lease()]))).toEqual(["2026-06", "2026-07", "2026-08"]);
+  });
+
+  it("bills the month containing asOf even before the due day arrives", () => {
+    const rows = run([lease({ startDate: utcDate(2026, 8, 1), rentDueDay: 28 })]);
+    expect(periods(rows)).toEqual(["2026-08"]);
+    expect(rows[0].dueDate).toEqual(utcDate(2026, 8, 28));
+  });
+
+  it("skips periods already on the books", () => {
+    const already = [
+      billedPeriodKey("lease-1", utcDate(2026, 6, 1)),
+      billedPeriodKey("lease-1", utcDate(2026, 7, 1)),
+    ];
+    expect(periods(run([lease()], already))).toEqual(["2026-08"]);
+  });
+
+  it("returns nothing when every period is already billed", () => {
+    const already = ["2026-06", "2026-07", "2026-08"].map((_, i) =>
+      billedPeriodKey("lease-1", utcDate(2026, 6 + i, 1)),
+    );
+    expect(run([lease()], already)).toEqual([]);
+  });
+
+  it("caps backfill at maxMonthsBack so an old lease doesn't post years of history", () => {
+    // Lease started in 2020; only the last 3 months may be posted.
+    const rows = run([lease({ startDate: utcDate(2020, 1, 1) })], [], utcDate(2026, 8, 11), 3);
+    expect(periods(rows)).toEqual(["2026-05", "2026-06", "2026-07", "2026-08"]);
+  });
+
+  it("stops billing after the month the lease ended", () => {
+    const rows = run([lease({ endDate: utcDate(2026, 7, 15) })]);
+    expect(periods(rows)).toEqual(["2026-06", "2026-07"]);
+  });
+
+  it("bills the final month of a lease that ends on the 1st", () => {
+    const rows = run([lease({ endDate: utcDate(2026, 7, 1) })]);
+    expect(periods(rows)).toEqual(["2026-06", "2026-07"]);
+  });
+
+  it("ignores a lease with no rent", () => {
+    expect(run([lease({ rentAmountCents: 0 })])).toEqual([]);
+    expect(run([lease({ rentAmountCents: -1 })])).toEqual([]);
+  });
+
+  it("clamps the due day into a month every month actually has", () => {
+    // rentDueDay is capped at 28 at write time; this is the guard on that
+    // contract holding through to the charge's dueDate (no Mar 31 → Feb 31).
+    const rows = run([lease({ startDate: utcDate(2026, 2, 1), rentDueDay: 31 })], [], utcDate(2026, 2, 15));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].dueDate).toEqual(utcDate(2026, 2, 28));
+  });
+
+  it("carries the lease's rent and a human description onto each charge", () => {
+    const rows = run([lease({ startDate: utcDate(2026, 8, 1), rentAmountCents: 195_000 })]);
+    expect(rows).toEqual([
+      {
+        leaseId: "lease-1",
+        type: "RENT",
+        amountCents: 195_000,
+        dueDate: utcDate(2026, 8, 1),
+        periodStart: utcDate(2026, 8, 1),
+        description: "Rent — August 2026",
+      },
+    ]);
+  });
+
+  it("bills each lease independently", () => {
+    const rows = run([
+      lease({ id: "a", startDate: utcDate(2026, 8, 1) }),
+      lease({ id: "b", startDate: utcDate(2026, 7, 1), rentAmountCents: 120_000 }),
+    ]);
+    expect(rows.filter((r) => r.leaseId === "a")).toHaveLength(1);
+    expect(rows.filter((r) => r.leaseId === "b")).toHaveLength(2);
+  });
+
+  it("does not let one lease's billed period suppress another's", () => {
+    // Same period, different lease — the key is (lease, period), not period.
+    const already = [billedPeriodKey("a", utcDate(2026, 8, 1))];
+    const rows = run(
+      [lease({ id: "a", startDate: utcDate(2026, 8, 1) }), lease({ id: "b", startDate: utcDate(2026, 8, 1) })],
+      already,
+    );
+    expect(rows.map((r) => r.leaseId)).toEqual(["b"]);
+  });
+
+  it("bills nothing for a lease starting after the current month", () => {
+    expect(run([lease({ startDate: utcDate(2026, 10, 1) })])).toEqual([]);
   });
 });
 

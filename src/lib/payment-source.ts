@@ -26,15 +26,6 @@ export const PAYMENT_SOURCE_SHORT_LABELS: Record<PaymentSource, string> = {
   IMPORT_PLAID: "Bank feed",
 };
 
-export function paymentSourceLabel(source: PaymentSource): string {
-  return PAYMENT_SOURCE_LABELS[source];
-}
-
-/** True for sources that represent a subsidy/housing-authority payer. */
-export function isSubsidySource(source: PaymentSource): boolean {
-  return source === "IMPORT_HAP";
-}
-
 export const RECONCILIATION_STATUS_LABELS: Record<PaymentReconciliationStatus, string> = {
   MATCHED: "Matched",
   SHORT: "Short",
