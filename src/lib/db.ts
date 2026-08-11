@@ -79,3 +79,25 @@ export const db: PrismaClient = new Proxy({} as PrismaClient, {
     return Reflect.get(globalForPrisma.prisma, prop, receiver);
   },
 });
+
+/**
+ * True for Prisma's unique-constraint violation (P2002).
+ *
+ * Checked structurally rather than with `instanceof
+ * Prisma.PrismaClientKnownRequestError`, because this app constructs its client
+ * from two different builds of @prisma/client (see the note at the top of this
+ * file) — an instanceof against one build's error class can be false for an
+ * error thrown by the other.
+ *
+ * Callers rely on this to tell "someone already has that email / that unit
+ * label / that period is already billed" apart from a genuine failure, so it
+ * has to stay narrow: any other error must keep propagating.
+ */
+export function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "P2002"
+  );
+}

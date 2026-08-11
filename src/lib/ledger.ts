@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db, isUniqueViolation } from "@/lib/db";
 import { chunked } from "@/lib/chunk";
 import {
   addUtcMonths,
@@ -265,24 +265,13 @@ export async function generateRentCharges(options: {
   return { created, leasesProcessed: leases.length };
 }
 
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: string }).code === "P2002"
-  );
-}
-
-export type LeaseWithLedger = Lease & {
-  charges: Charge[];
-  payments: Payment[];
-  balance: LeaseBalance;
-};
-
 /**
  * Loads a lease with its ledger, scoped to an organization. Returns null rather
  * than throwing so callers can decide between 404 and a redirect.
+ *
+ * The return type is deliberately inferred: it's the `include` above plus
+ * `balance`, and spelling that out by hand is how it drifts from what the query
+ * actually selects.
  */
 export async function getLeaseLedger(leaseId: string, organizationId: string) {
   const lease = await db.lease.findFirst({

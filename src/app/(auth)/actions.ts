@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { db, isUniqueViolation } from "@/lib/db";
 import { hashPassword, signIn } from "@/lib/auth";
 import { appUrl, sendEmailSafely } from "@/lib/email";
 import {
@@ -368,13 +368,4 @@ export async function signOutAction(): Promise<void> {
   const { signOut } = await import("@/lib/auth");
   await signOut({ redirectTo: "/login" });
   redirect("/login");
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: string }).code === "P2002"
-  );
 }

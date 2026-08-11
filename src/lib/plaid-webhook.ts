@@ -1,4 +1,5 @@
 import { getPlaid } from "@/lib/plaid";
+import { base64UrlToBytes, base64UrlToString, sha256Hex } from "@/lib/encoding";
 
 /**
  * Verifies a Plaid webhook's Plaid-Verification header against Plaid's
@@ -36,12 +37,12 @@ export async function verifyPlaidWebhook(
   if (parts.length !== 3) throw new Error("Malformed Plaid webhook JWT.");
   const [headerB64, payloadB64, signatureB64] = parts;
 
-  const header = JSON.parse(base64UrlDecodeToString(headerB64)) as { alg?: string; kid?: string };
+  const header = JSON.parse(base64UrlToString(headerB64)) as { alg?: string; kid?: string };
   if (header.alg !== "ES256" || !header.kid) {
     throw new Error("Unexpected Plaid webhook JWT header.");
   }
 
-  const payload = JSON.parse(base64UrlDecodeToString(payloadB64)) as {
+  const payload = JSON.parse(base64UrlToString(payloadB64)) as {
     iat?: number;
     request_body_sha256?: string;
   };
@@ -61,7 +62,7 @@ export async function verifyPlaidWebhook(
   );
 
   const signingInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
-  const signature = base64UrlDecodeToBytes(signatureB64);
+  const signature = base64UrlToBytes(signatureB64);
   const validSignature = await crypto.subtle.verify(
     { name: "ECDSA", hash: "SHA-256" },
     cryptoKey,
@@ -95,20 +96,3 @@ async function getVerificationKey(keyId: string): Promise<JsonWebKey> {
   return jwk;
 }
 
-function base64UrlDecodeToString(input: string): string {
-  return new TextDecoder().decode(base64UrlDecodeToBytes(input));
-}
-
-function base64UrlDecodeToBytes(input: string): Uint8Array<ArrayBuffer> {
-  const padded = input.replace(/-/g, "+").replace(/_/g, "/");
-  const withPadding = padded + "=".repeat((4 - (padded.length % 4)) % 4);
-  const binary = atob(withPadding);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}

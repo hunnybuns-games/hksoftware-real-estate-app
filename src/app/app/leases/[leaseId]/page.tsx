@@ -8,7 +8,7 @@ import { getLeaseFormOptions } from "@/lib/lease-options";
 import { endLeaseAction, updateLeaseAction } from "@/actions/leases";
 import { addChargeAction, recordManualPaymentAction, voidChargeAction } from "@/actions/payments";
 import { centsToInputValue, formatCents } from "@/lib/money";
-import { formatDate, relativeDays, toDateInputValue } from "@/lib/dates";
+import { formatDate, ordinalDay, relativeDays, toDateInputValue } from "@/lib/dates";
 import { getRentSplit } from "@/lib/rent-split";
 import {
   Badge,
@@ -115,7 +115,7 @@ export default async function LeaseDetailPage({
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Monthly rent" value={formatCents(lease.rentAmountCents)} hint={`Due on the ${ordinal(lease.rentDueDay)}`} />
+        <StatTile label="Monthly rent" value={formatCents(lease.rentAmountCents)} hint={`Due on the ${ordinalDay(lease.rentDueDay)}`} />
         <StatTile label="Billed to date" value={formatCents(balance.chargedCents)} />
         <StatTile label="Collected" value={formatCents(balance.settledCents)} tone="positive" hint={balance.pendingCents > 0 ? `+ ${formatCents(balance.pendingCents)} clearing` : undefined} />
         <StatTile
@@ -285,7 +285,7 @@ export default async function LeaseDetailPage({
             <DescriptionList
               items={[
                 { label: "Deposit held", value: formatCents(lease.depositCents) },
-                { label: "Rent due", value: `${ordinal(lease.rentDueDay)} of the month` },
+                { label: "Rent due", value: `${ordinalDay(lease.rentDueDay)} of the month` },
                 {
                   label: "Grace period",
                   value: `${lease.organization.graceDays} day${lease.organization.graceDays === 1 ? "" : "s"}`,
@@ -343,10 +343,4 @@ export default async function LeaseDetailPage({
       </div>
     </div>
   );
-}
-
-function ordinal(n: number): string {
-  const suffix =
-    n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th";
-  return `${n}${suffix}`;
 }

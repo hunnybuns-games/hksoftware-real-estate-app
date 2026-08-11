@@ -88,6 +88,24 @@ export function fromDateInputValue(value: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * A day of the month as an ordinal — "1st", "22nd", "3rd". Only ever used for
+ * a lease's rentDueDay, which is clamped to 1-28, but the teens are handled
+ * anyway so the function is correct on its own terms rather than only inside
+ * that range.
+ */
+export function ordinalDay(n: number): string {
+  const suffix =
+    n % 10 === 1 && n % 100 !== 11
+      ? "st"
+      : n % 10 === 2 && n % 100 !== 12
+        ? "nd"
+        : n % 10 === 3 && n % 100 !== 13
+          ? "rd"
+          : "th";
+  return `${n}${suffix}`;
+}
+
 export function relativeDays(days: number): string {
   if (days === 0) return "today";
   if (days === 1) return "tomorrow";

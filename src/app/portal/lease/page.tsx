@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { requireTenant } from "@/lib/rbac";
 import { getTenantLeases } from "@/lib/tenant-view";
 import { formatCents } from "@/lib/money";
-import { formatDate } from "@/lib/dates";
+import { formatDate, ordinalDay } from "@/lib/dates";
 import { Card, DescriptionList, EmptyState, LeaseStatusBadge } from "@/components/ui";
 
 export const metadata: Metadata = { title: "My lease" };
@@ -50,7 +50,7 @@ export default async function PortalLeasePage() {
                   value: `${lease.unit.bedrooms} bed · ${lease.unit.bathrooms} bath`,
                 },
                 { label: "Monthly rent", value: formatCents(lease.rentAmountCents) },
-                { label: "Rent due", value: `${ordinal(lease.rentDueDay)} of each month` },
+                { label: "Rent due", value: `${ordinalDay(lease.rentDueDay)} of each month` },
                 { label: "Lease starts", value: formatDate(lease.startDate) },
                 {
                   label: "Lease ends",
@@ -69,10 +69,4 @@ export default async function PortalLeasePage() {
       </p>
     </div>
   );
-}
-
-function ordinal(n: number): string {
-  const suffix =
-    n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th";
-  return `${n}${suffix}`;
 }

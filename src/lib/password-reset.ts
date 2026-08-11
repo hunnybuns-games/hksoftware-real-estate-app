@@ -16,6 +16,8 @@
  *    our code to leak timing, and the index does the work.
  */
 
+import { bytesToBase64Url, sha256Hex } from "@/lib/encoding";
+
 /** One hour. Long enough to find the email, short enough that a stale inbox isn't a standing key. */
 export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
@@ -29,24 +31,14 @@ const TOKEN_BYTES = 32; // 256 bits
 export async function createResetToken(): Promise<{ token: string; tokenHash: string }> {
   const bytes = new Uint8Array(TOKEN_BYTES);
   crypto.getRandomValues(bytes);
-  const token = base64Url(bytes);
+  // base64url, not base64: the token goes in a path segment, so `+`, `/` and
+  // `=` would all need escaping and would survive an email client only by luck.
+  const token = bytesToBase64Url(bytes);
   return { token, tokenHash: await hashResetToken(token) };
 }
 
 export async function hashResetToken(token: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-/**
- * URL-safe base64 without padding — the token goes in a path segment, so `+`,
- * `/` and `=` would all need escaping and would survive being mangled by an
- * email client only by luck.
- */
-function base64Url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return sha256Hex(token);
 }
 
 /** True when a token row can still be redeemed. Pure, so the rules are testable. */

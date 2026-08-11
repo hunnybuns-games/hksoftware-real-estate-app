@@ -9,7 +9,14 @@
  * place — same reasoning as Stripe's fetch-based HTTP client in
  * src/lib/stripe.ts: prefer the API that's identically real everywhere over
  * the one that merely happens to be shimmed on one of the two runtimes.
+ *
+ * The base64 encoding of the stored value is part of this module's on-disk
+ * format: anything already in BankConnection.accessTokenEncrypted has to keep
+ * decrypting. src/lib/__tests__/token-encryption.test.ts pins that with a
+ * fixed ciphertext vector.
  */
+
+import { base64ToBytes, bytesToBase64 } from "@/lib/encoding";
 
 const ALGORITHM = "AES-GCM";
 const IV_BYTES = 12; // 96 bits — the size AES-GCM is defined for; don't change this independently of decrypt.
@@ -56,21 +63,4 @@ export async function decryptToken(encoded: string): Promise<string> {
   const ciphertext = combined.slice(IV_BYTES);
   const plaintext = await crypto.subtle.decrypt({ name: ALGORITHM, iv }, key, ciphertext);
   return new TextDecoder().decode(plaintext);
-}
-
-// btoa/atob work on binary strings, not arbitrary byte arrays directly — the
-// char-code round trip below is the standard, portable way to bridge that,
-// and (unlike Buffer) btoa/atob are real standard globals in both Node and
-// Workers, not something nodejs_compat has to stand in for.
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
-function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
 }

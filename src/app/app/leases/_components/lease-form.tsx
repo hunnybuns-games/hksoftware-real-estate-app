@@ -11,6 +11,7 @@ import {
   TextInput,
 } from "@/components/form";
 import type { ActionState } from "@/lib/forms";
+import { ordinalDay } from "@/lib/dates";
 
 export type UnitOption = {
   id: string;
@@ -141,7 +142,7 @@ export function LeaseForm({
               <Select name="rentDueDay" state={state} defaultValue={defaults.rentDueDay} required>
                 {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
                   <option key={d} value={d}>
-                    {ordinal(d)}
+                    {ordinalDay(d)}
                   </option>
                 ))}
               </Select>
@@ -228,10 +229,4 @@ export function LeaseForm({
       )}
     </ActionForm>
   );
-}
-
-function ordinal(n: number): string {
-  const suffix =
-    n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th";
-  return `${n}${suffix}`;
 }

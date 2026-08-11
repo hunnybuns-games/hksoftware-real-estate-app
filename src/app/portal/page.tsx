@@ -3,7 +3,7 @@ import { requireTenant } from "@/lib/rbac";
 import { getTenantLeases, primaryLease } from "@/lib/tenant-view";
 import { startRentPaymentAction, simulatePaymentAction } from "@/actions/tenant-payments";
 import { centsToInputValue, formatCents } from "@/lib/money";
-import { formatDate, relativeDays } from "@/lib/dates";
+import { formatDate, ordinalDay, relativeDays } from "@/lib/dates";
 import { Badge, Banner, Card, EmptyState, PaymentStatusBadge } from "@/components/ui";
 import { PayRentForm } from "./_components/pay-rent-form";
 
@@ -79,7 +79,7 @@ export default async function PortalHomePage({
         ) : (
           <p className="mt-2 text-sm text-slate-500">
             Next rent of {formatCents(lease.rentAmountCents)} is due on the{" "}
-            {ordinal(lease.rentDueDay)}.
+            {ordinalDay(lease.rentDueDay)}.
           </p>
         )}
 
@@ -167,10 +167,4 @@ export default async function PortalHomePage({
       </Card>
     </div>
   );
-}
-
-function ordinal(n: number): string {
-  const suffix =
-    n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th";
-  return `${n}${suffix}`;
 }

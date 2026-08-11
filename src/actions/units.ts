@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { db, isUniqueViolation } from "@/lib/db";
 import { assertStaff } from "@/lib/rbac";
 import {
   type ActionState,
@@ -143,13 +143,4 @@ export async function deleteUnitAction(unitId: string, _prev: ActionState): Prom
     revalidatePath("/app/properties");
     return actionOk("Unit deleted.");
   });
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: string }).code === "P2002"
-  );
 }
