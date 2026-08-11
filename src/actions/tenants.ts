@@ -142,19 +142,21 @@ export async function inviteTenantAction(
     const token = randomBytes(32).toString("base64url");
     const lease = tenant.leases[0];
 
-    await db.$transaction(async (tx) => {
-      await tx.invitation.deleteMany({ where: { tenantId: tenant.id } });
-      await tx.invitation.create({
-        data: {
-          organizationId,
-          tenantId: tenant.id,
-          email: tenant.email,
-          name: `${tenant.firstName} ${tenant.lastName}`,
-          role: "TENANT",
-          token,
-          expiresAt: addUtcDays(new Date(), 7),
-        },
-      });
+    // Not wrapped in $transaction — D1 doesn't support interactive
+    // transactions and throws outright if asked to. Sequential calls run
+    // exactly as they always did on this database (the old wrapper's
+    // commit/rollback were no-ops here anyway).
+    await db.invitation.deleteMany({ where: { tenantId: tenant.id } });
+    await db.invitation.create({
+      data: {
+        organizationId,
+        tenantId: tenant.id,
+        email: tenant.email,
+        name: `${tenant.firstName} ${tenant.lastName}`,
+        role: "TENANT",
+        token,
+        expiresAt: addUtcDays(new Date(), 7),
+      },
     });
 
     await notifyTenantInvite({

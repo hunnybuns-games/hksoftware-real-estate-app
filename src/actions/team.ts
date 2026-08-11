@@ -50,22 +50,25 @@ export async function inviteStaffAction(
 
     const token = randomBytes(32).toString("base64url");
 
-    await db.$transaction(async (tx) => {
-      // Supersede any outstanding invite for this address so the newest link is
-      // the only one that works.
-      await tx.invitation.deleteMany({
-        where: { organizationId: ctx.organizationId, email, acceptedAt: null },
-      });
-      await tx.invitation.create({
-        data: {
-          organizationId: ctx.organizationId,
-          email,
-          name,
-          role,
-          token,
-          expiresAt: addUtcDays(new Date(), 7),
-        },
-      });
+    // Not wrapped in $transaction — D1 doesn't support interactive
+    // transactions and throws outright if asked to. Sequential calls run
+    // exactly as they always did on this database (the old wrapper's
+    // commit/rollback were no-ops here anyway).
+    //
+    // Supersede any outstanding invite for this address so the newest link is
+    // the only one that works.
+    await db.invitation.deleteMany({
+      where: { organizationId: ctx.organizationId, email, acceptedAt: null },
+    });
+    await db.invitation.create({
+      data: {
+        organizationId: ctx.organizationId,
+        email,
+        name,
+        role,
+        token,
+        expiresAt: addUtcDays(new Date(), 7),
+      },
     });
 
     await notifyStaffInvite({
@@ -200,14 +203,16 @@ export async function setOwnerPropertiesAction(
       select: { id: true },
     });
 
-    await db.$transaction(async (tx) => {
-      await tx.propertyOwner.deleteMany({ where: { userId: member.id } });
-      if (valid.length) {
-        await tx.propertyOwner.createMany({
-          data: valid.map((p) => ({ userId: member.id, propertyId: p.id })),
-        });
-      }
-    });
+    // Not wrapped in $transaction — D1 doesn't support interactive
+    // transactions and throws outright if asked to. Sequential calls run
+    // exactly as they always did on this database (the old wrapper's
+    // commit/rollback were no-ops here anyway).
+    await db.propertyOwner.deleteMany({ where: { userId: member.id } });
+    if (valid.length) {
+      await db.propertyOwner.createMany({
+        data: valid.map((p) => ({ userId: member.id, propertyId: p.id })),
+      });
+    }
 
     revalidatePath("/app/settings/team");
     revalidatePath("/owner");

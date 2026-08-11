@@ -207,28 +207,30 @@ export async function updateRequestAction(
 
     const statusChanged = request.status !== parsed.data.status;
 
-    await db.$transaction(async (tx) => {
-      if (statusChanged) {
-        await tx.maintenanceRequest.update({
-          where: { id: request.id },
-          data: {
-            status: parsed.data.status,
-            resolvedAt: parsed.data.status === "RESOLVED" ? new Date() : null,
-          },
-        });
-      }
-      if (parsed.data.note) {
-        await tx.maintenanceNote.create({
-          data: {
-            requestId: request.id,
-            authorId: ctx.id,
-            body: parsed.data.note,
-            // A note the tenant is being emailed is by definition not internal.
-            internal: !parsed.data.notifyTenant,
-          },
-        });
-      }
-    });
+    // Not wrapped in $transaction — D1 doesn't support interactive
+    // transactions and throws outright if asked to. Sequential calls run
+    // exactly as they always did on this database (the old wrapper's
+    // commit/rollback were no-ops here anyway).
+    if (statusChanged) {
+      await db.maintenanceRequest.update({
+        where: { id: request.id },
+        data: {
+          status: parsed.data.status,
+          resolvedAt: parsed.data.status === "RESOLVED" ? new Date() : null,
+        },
+      });
+    }
+    if (parsed.data.note) {
+      await db.maintenanceNote.create({
+        data: {
+          requestId: request.id,
+          authorId: ctx.id,
+          body: parsed.data.note,
+          // A note the tenant is being emailed is by definition not internal.
+          internal: !parsed.data.notifyTenant,
+        },
+      });
+    }
 
     if (parsed.data.notifyTenant && request.lease?.tenant) {
       await notifyMaintenanceUpdated({

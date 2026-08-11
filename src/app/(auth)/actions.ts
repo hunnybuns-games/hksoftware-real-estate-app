@@ -103,17 +103,24 @@ export async function signupAction(_prev: ActionState, formData: FormData): Prom
     const passwordHash = await hashPassword(password);
 
     try {
-      await db.$transaction(async (tx) => {
-        const org = await tx.organization.create({ data: { name: organizationName } });
-        await tx.user.create({
-          data: {
-            email,
-            name,
-            passwordHash,
-            role: "ADMIN",
-            organizationId: org.id,
-          },
-        });
+      // Not wrapped in $transaction: D1 doesn't support interactive
+      // transactions at all — Prisma throws outright rather than silently
+      // downgrading, as of the version pinned here. Sequential awaited calls
+      // don't lose anything real: D1's own adapter never backed the old
+      // wrapper with actual atomicity either (its commit/rollback are no-op
+      // debug logs), so this runs exactly as it always has on this database.
+      // An org created with no user attached (crash between the two calls) is
+      // an orphan row, not a broken account — nothing points at it, and
+      // signup is safe to retry with the same email.
+      const org = await db.organization.create({ data: { name: organizationName } });
+      await db.user.create({
+        data: {
+          email,
+          name,
+          passwordHash,
+          role: "ADMIN",
+          organizationId: org.id,
+        },
       });
     } catch (err) {
       // Two simultaneous signups with the same email land here.
@@ -173,28 +180,30 @@ export async function acceptInviteAction(
     const passwordHash = await hashPassword(password);
 
     try {
-      await db.$transaction(async (tx) => {
-        const user = await tx.user.create({
-          data: {
-            email: invite.email,
-            name,
-            passwordHash,
-            role: invite.role,
-            organizationId: invite.organizationId,
-          },
-        });
+      // Not wrapped in $transaction — see the comment on signupAction above.
+      // D1 throws outright on interactive transactions, and these sequential
+      // calls run exactly as they always did (the old wrapper's commit/rollback
+      // were no-ops on this database anyway).
+      const user = await db.user.create({
+        data: {
+          email: invite.email,
+          name,
+          passwordHash,
+          role: invite.role,
+          organizationId: invite.organizationId,
+        },
+      });
 
-        if (invite.tenantId) {
-          await tx.tenant.update({
-            where: { id: invite.tenantId },
-            data: { userId: user.id },
-          });
-        }
-
-        await tx.invitation.update({
-          where: { id: invite.id },
-          data: { acceptedAt: new Date() },
+      if (invite.tenantId) {
+        await db.tenant.update({
+          where: { id: invite.tenantId },
+          data: { userId: user.id },
         });
+      }
+
+      await db.invitation.update({
+        where: { id: invite.id },
+        data: { acceptedAt: new Date() },
       });
     } catch (err) {
       if (isUniqueViolation(err)) {
@@ -321,30 +330,30 @@ export async function resetPasswordAction(
 
     const passwordHash = await hashPassword(password);
 
+    // Not wrapped in $transaction — see the comment on signupAction above. The
+    // race this guards against isn't transactional atomicity anyway: it's the
+    // `where: { usedAt: null }` scoping on the first updateMany below, which
+    // makes a concurrent redemption of the same link update zero rows rather
+    // than both winning, regardless of what wraps it.
     let claimed = false;
-    await db.$transaction(async (tx) => {
-      // Scoped to usedAt: null so a concurrent redemption of the same link
-      // updates zero rows rather than both winning. Reported through a flag
-      // rather than a thrown error, so the caller can tell "someone else already
-      // used this link" apart from a genuine failure.
-      const result = await tx.passwordResetToken.updateMany({
-        where: { id: row.id, usedAt: null },
-        data: { usedAt: new Date() },
-      });
-      if (result.count === 0) return;
+    const result = await db.passwordResetToken.updateMany({
+      where: { id: row.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    if (result.count > 0) {
       claimed = true;
 
-      await tx.user.update({
+      await db.user.update({
         where: { id: row.user.id },
         data: { passwordHash },
       });
 
       // Every other outstanding link for this user dies with the password change.
-      await tx.passwordResetToken.updateMany({
+      await db.passwordResetToken.updateMany({
         where: { userId: row.user.id, usedAt: null },
         data: { usedAt: new Date() },
       });
-    });
+    }
 
     if (!claimed) return actionError(UNUSABLE);
 

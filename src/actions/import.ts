@@ -196,34 +196,36 @@ export async function confirmImportAction(
 
     const affectedLeaseIds = new Set<string>();
 
-    await db.$transaction(async (tx) => {
-      for (const row of importableRows) {
-        const chosen = formData.get(`lease_${row.rowIndex}`);
-        const leaseId =
-          typeof chosen === "string" && chosen !== "" && validLeaseIds.has(chosen) ? chosen : null;
-        if (leaseId) affectedLeaseIds.add(leaseId);
+    // Not wrapped in $transaction — D1 doesn't support interactive
+    // transactions and throws outright if asked to. Sequential calls run
+    // exactly as they always did on this database (the old wrapper's
+    // commit/rollback were no-ops here anyway).
+    for (const row of importableRows) {
+      const chosen = formData.get(`lease_${row.rowIndex}`);
+      const leaseId =
+        typeof chosen === "string" && chosen !== "" && validLeaseIds.has(chosen) ? chosen : null;
+      if (leaseId) affectedLeaseIds.add(leaseId);
 
-        await tx.payment.create({
-          data: {
-            organizationId: ctx.organizationId,
-            leaseId,
-            amountCents: row.amountCents!,
-            status: "SUCCEEDED",
-            source: batch.source,
-            reconciliationStatus: leaseId ? "MATCHED" : "UNMATCHED",
-            paidAt: row.date!,
-            memo: row.description || null,
-            payerNameRaw: row.payerRaw || null,
-            externalRef: row.externalRef,
-            importBatchId: batch.id,
-          },
-        });
-      }
-
-      await tx.paymentImportBatch.update({
-        where: { id: batch.id },
-        data: { status: "CONFIRMED" },
+      await db.payment.create({
+        data: {
+          organizationId: ctx.organizationId,
+          leaseId,
+          amountCents: row.amountCents!,
+          status: "SUCCEEDED",
+          source: batch.source,
+          reconciliationStatus: leaseId ? "MATCHED" : "UNMATCHED",
+          paidAt: row.date!,
+          memo: row.description || null,
+          payerNameRaw: row.payerRaw || null,
+          externalRef: row.externalRef,
+          importBatchId: batch.id,
+        },
       });
+    }
+
+    await db.paymentImportBatch.update({
+      where: { id: batch.id },
+      data: { status: "CONFIRMED" },
     });
 
     // Recompute real MATCHED/SHORT/LATE status (not just the "has a lease"

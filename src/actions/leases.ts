@@ -113,16 +113,17 @@ export async function createLeaseAction(
       if (conflict) return conflict;
     }
 
-    const lease = await db.$transaction(async (tx) => {
-      const created = await tx.lease.create({
-        data: { ...data, organizationId },
-        select: { id: true },
-      });
-      if (data.status === "ACTIVE") {
-        await tx.unit.update({ where: { id: unit.id }, data: { status: "OCCUPIED" } });
-      }
-      return created;
+    // Not wrapped in $transaction — D1 doesn't support interactive
+    // transactions and throws outright if asked to. Sequential calls run
+    // exactly as they always did on this database (the old wrapper's
+    // commit/rollback were no-ops here anyway).
+    const lease = await db.lease.create({
+      data: { ...data, organizationId },
+      select: { id: true },
     });
+    if (data.status === "ACTIVE") {
+      await db.unit.update({ where: { id: unit.id }, data: { status: "OCCUPIED" } });
+    }
 
     // Put the rent that's already owed on the books immediately, so the lease
     // detail page isn't empty and the dashboard is accurate the moment it's
@@ -183,32 +184,34 @@ export async function updateLeaseAction(
       if (conflict) return conflict;
     }
 
-    await db.$transaction(async (tx) => {
-      await tx.lease.update({ where: { id: existing.id }, data });
+    // Not wrapped in $transaction — D1 doesn't support interactive
+    // transactions and throws outright if asked to. Sequential calls run
+    // exactly as they always did on this database (the old wrapper's
+    // commit/rollback were no-ops here anyway).
+    await db.lease.update({ where: { id: existing.id }, data });
 
-      if (data.status === "ACTIVE") {
-        await tx.unit.update({ where: { id: unit.id }, data: { status: "OCCUPIED" } });
-      }
+    if (data.status === "ACTIVE") {
+      await db.unit.update({ where: { id: unit.id }, data: { status: "OCCUPIED" } });
+    }
 
-      // If this lease is no longer active, or it moved to a different unit, the
-      // unit(s) it left behind may now be vacant.
-      const unitsToReconcile = new Set<string>();
-      if (data.status !== "ACTIVE") unitsToReconcile.add(existing.unitId);
-      if (existing.unitId !== unit.id) unitsToReconcile.add(existing.unitId);
+    // If this lease is no longer active, or it moved to a different unit, the
+    // unit(s) it left behind may now be vacant.
+    const unitsToReconcile = new Set<string>();
+    if (data.status !== "ACTIVE") unitsToReconcile.add(existing.unitId);
+    if (existing.unitId !== unit.id) unitsToReconcile.add(existing.unitId);
 
-      for (const id of unitsToReconcile) {
-        const stillOccupied = await tx.lease.count({
-          where: { unitId: id, status: "ACTIVE" },
-        });
-        if (stillOccupied === 0) {
-          const current = await tx.unit.findUnique({ where: { id }, select: { status: true } });
-          // Leave a unit that's deliberately marked MAINTENANCE alone.
-          if (current?.status === "OCCUPIED") {
-            await tx.unit.update({ where: { id }, data: { status: "VACANT" } });
-          }
+    for (const id of unitsToReconcile) {
+      const stillOccupied = await db.lease.count({
+        where: { unitId: id, status: "ACTIVE" },
+      });
+      if (stillOccupied === 0) {
+        const current = await db.unit.findUnique({ where: { id }, select: { status: true } });
+        // Leave a unit that's deliberately marked MAINTENANCE alone.
+        if (current?.status === "OCCUPIED") {
+          await db.unit.update({ where: { id }, data: { status: "VACANT" } });
         }
       }
-    });
+    }
 
     if (data.status === "ACTIVE") await generateRentCharges({ organizationId });
 
@@ -238,29 +241,31 @@ export async function endLeaseAction(leaseId: string, _prev: ActionState): Promi
 
     const today = startOfUtcDay(new Date());
 
-    await db.$transaction(async (tx) => {
-      await tx.lease.update({
-        where: { id: lease.id },
-        data: {
-          status: "ENDED",
-          // Keep an end date that was already agreed; otherwise it ends today.
-          endDate: lease.endDate ?? today,
-        },
-      });
-
-      const stillOccupied = await tx.lease.count({
-        where: { unitId: lease.unitId, status: "ACTIVE" },
-      });
-      if (stillOccupied === 0) {
-        const unit = await tx.unit.findUnique({
-          where: { id: lease.unitId },
-          select: { status: true },
-        });
-        if (unit?.status === "OCCUPIED") {
-          await tx.unit.update({ where: { id: lease.unitId }, data: { status: "VACANT" } });
-        }
-      }
+    // Not wrapped in $transaction — D1 doesn't support interactive
+    // transactions and throws outright if asked to. Sequential calls run
+    // exactly as they always did on this database (the old wrapper's
+    // commit/rollback were no-ops here anyway).
+    await db.lease.update({
+      where: { id: lease.id },
+      data: {
+        status: "ENDED",
+        // Keep an end date that was already agreed; otherwise it ends today.
+        endDate: lease.endDate ?? today,
+      },
     });
+
+    const stillOccupied = await db.lease.count({
+      where: { unitId: lease.unitId, status: "ACTIVE" },
+    });
+    if (stillOccupied === 0) {
+      const unit = await db.unit.findUnique({
+        where: { id: lease.unitId },
+        select: { status: true },
+      });
+      if (unit?.status === "OCCUPIED") {
+        await db.unit.update({ where: { id: lease.unitId }, data: { status: "VACANT" } });
+      }
+    }
 
     revalidateLeaseViews(leaseId);
     return actionOk("Lease ended. The unit is now marked vacant.");

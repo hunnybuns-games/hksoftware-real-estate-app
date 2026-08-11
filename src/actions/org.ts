@@ -69,12 +69,14 @@ export async function createOrganizationAction(
     const parsed = parseForm(z.object({ name: nameField }), formData);
     if (!parsed.ok) return parsed.state;
 
-    await db.$transaction(async (tx) => {
-      const org = await tx.organization.create({ data: { name: parsed.data.name } });
-      await tx.user.update({
-        where: { id: session.user.id },
-        data: { organizationId: org.id, role: "ADMIN" },
-      });
+    // Not wrapped in $transaction — D1 doesn't support interactive
+    // transactions and throws outright if asked to. Sequential calls run
+    // exactly as they always did on this database (the old wrapper's
+    // commit/rollback were no-ops here anyway).
+    const org = await db.organization.create({ data: { name: parsed.data.name } });
+    await db.user.update({
+      where: { id: session.user.id },
+      data: { organizationId: org.id, role: "ADMIN" },
     });
 
     created = true;
