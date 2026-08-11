@@ -20,25 +20,22 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
+      # Everything below is `tee`'d to stdout as well as the summary. The summary
+      # is only visible in the GitHub UI — there's no API for it — so the first
+      # version of this workflow wrote real evidence nowhere retrievable.
       - name: Fetch key pages
         env:
           BASE: ${{ inputs.base_url }}
         run: |
           check() {
             path="$1"
-            echo "## $path" >> "$GITHUB_STEP_SUMMARY"
-            echo >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            # -D- prints response headers to stdout ahead of the body.
-            curl -sS -D- -o body.html -w "\nHTTP_STATUS:%{http_code}\n" "$BASE$path" >> "$GITHUB_STEP_SUMMARY" 2>&1 || echo "curl failed: $?" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            echo >> "$GITHUB_STEP_SUMMARY"
-            echo "First 4000 chars of body:" >> "$GITHUB_STEP_SUMMARY"
-            echo '```html' >> "$GITHUB_STEP_SUMMARY"
-            head -c 4000 body.html >> "$GITHUB_STEP_SUMMARY"
-            echo >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            echo >> "$GITHUB_STEP_SUMMARY"
+            { echo "## $path"; echo; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+            # -D- prints response headers ahead of the body.
+            curl -sS -D- -o body.html -w "\nHTTP_STATUS:%{http_code}\n" "$BASE$path" 2>&1 \
+              | tee -a "$GITHUB_STEP_SUMMARY" || echo "curl failed: $?" | tee -a "$GITHUB_STEP_SUMMARY"
+            { echo '```'; echo; echo "First 4000 chars of body:"; echo '```html'; } | tee -a "$GITHUB_STEP_SUMMARY"
+            head -c 4000 body.html | tee -a "$GITHUB_STEP_SUMMARY"
+            { echo; echo '```'; echo; } | tee -a "$GITHUB_STEP_SUMMARY"
             cp body.html "saved-$(echo "$path" | tr '/' '_').html"
           }
           check "/signup"
@@ -47,10 +44,9 @@ jobs:
 
       - name: Extract script tags and nonces from signup page
         run: |
-          echo "## Script tags on /signup" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          grep -oE '<script[^>]*>' "saved-_signup.html" | head -40 >> "$GITHUB_STEP_SUMMARY" || true
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          { echo "## Script tags on /signup"; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          grep -oE '<script[^>]*>' "saved-_signup.html" | head -40 | tee -a "$GITHUB_STEP_SUMMARY" || true
+          echo '```' | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload full bodies
         uses: actions/upload-artifact@v4
