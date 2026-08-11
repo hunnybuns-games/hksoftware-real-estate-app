@@ -543,7 +543,8 @@ in the bundling step.
   drops those tables, not just their rows. That's how a production database ended up with
   no tables at all, which reads as "login is broken and signup doesn't work". Recovery is
   `npm run cf:migrate` (§14). Never rehearse a restore against the real database; use a
-  throwaway one.
+  throwaway one. Recovering by pasting SQL has its own cost, since it leaves the migration
+  ledger empty — see "If the ledger and the schema disagree" in §14.
 - **The Plaid bank feed (§5) has never completed a live Sandbox connect-and-sync.** It was
   built and unit-tested with real logic/crypto but no live network access to Plaid at all
   (the build session's network policy blocked Plaid's API and CDN hosts outright). Do the
@@ -641,6 +642,31 @@ Safe to re-run — anything already applied is skipped ("No migrations to apply!
 
 `npm run cf:migrate:local` does the same against the local Miniflare D1, which is a good
 way to rehearse a migration before it touches production.
+
+#### If the ledger and the schema disagree
+
+This has happened once, and the symptom is confusing enough to be worth recognising:
+`migrations list` reports **every** migration as outstanding while the tables plainly
+already exist. That's what applying SQL by hand leaves behind — the console creates the
+tables and writes nothing to `d1_migrations`. Running `apply` in that state starts at the
+first migration, hits `CREATE TABLE "Organization"` on a table that exists, and stops
+without applying anything newer. It fails safely, but it fails.
+
+The fix is to record the already-applied migrations in the ledger so `apply` skips them —
+but only after establishing that the live schema really is what those migrations produce.
+Table names aren't enough; a hand-pasted schema can have every table and still be missing
+indexes, and the ledger is what you'd normally consult. So:
+
+1. Run the workflow's `schema` action to dump the live schema (`--no-data`).
+2. Build a reference locally from scratch — `npm run cf:migrate:local`, then
+   `npx wrangler d1 export <db> --local --no-data` — and diff the two.
+3. If the only differences belong to migrations you know haven't run, backfill the ledger
+   for the rest. `scripts/d1-repair-ledger.sql` is the instance of this that was actually
+   needed, with its reasoning; use it as a model, don't extend it.
+4. Then `apply`, and confirm the table count moved.
+
+Watch for one trap in step 2: an extraction regex over object names must allow digits, or
+`d1_migrations` silently drops out of one side of the diff and looks like drift.
 
 > **This replaced applying SQL by hand**, which had no record of what had run. That
 > gap cost real downtime twice: once when a deployed page queried a table that was
