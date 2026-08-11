@@ -31,6 +31,7 @@ on:
           - schema # read-only: dump the full schema, to diff against the migrations
           - apply # apply outstanding migrations (backs up first)
           - backup # export the database and attach it to this run
+          - repair-ledger # one-off: record the two hand-applied migrations (see scripts/d1-repair-ledger.sql)
   push:
     paths:
       - "migrations/**"
@@ -156,7 +157,7 @@ jobs:
           retention-days: 90
 
       - name: Back up the database
-        if: env.ACTION == 'apply' || env.ACTION == 'backup'
+        if: env.ACTION == 'apply' || env.ACTION == 'backup' || env.ACTION == 'repair-ledger'
         run: |
           npx wrangler d1 export "$DB_NAME" --remote --output=d1-backup.sql
           {
@@ -166,7 +167,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Attach the backup to this run
-        if: env.ACTION == 'apply' || env.ACTION == 'backup'
+        if: env.ACTION == 'apply' || env.ACTION == 'backup' || env.ACTION == 'repair-ledger'
         uses: actions/upload-artifact@v4
         with:
           name: d1-backup-${{ github.run_number }}
@@ -174,6 +175,17 @@ jobs:
           # Long enough to cover "I noticed something wrong weeks later", which is
           # exactly the case Time Travel's window doesn't reach.
           retention-days: 90
+
+      # Runs a committed SQL file, not an input — this must not become a general
+      # "execute arbitrary SQL against production" button. See the file itself for
+      # what it does and the evidence it rests on.
+      - name: Repair the migration ledger
+        if: env.ACTION == 'repair-ledger'
+        run: |
+          npx wrangler d1 execute "$DB_NAME" --remote --file=scripts/d1-repair-ledger.sql -y
+          echo "Ledger after repair:"
+          npx wrangler d1 execute "$DB_NAME" --remote \
+            --command="SELECT name, applied_at FROM d1_migrations ORDER BY id;"
 
       - name: Apply outstanding migrations
         if: env.ACTION == 'apply'
