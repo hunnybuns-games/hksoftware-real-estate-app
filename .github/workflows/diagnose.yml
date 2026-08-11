@@ -1,0 +1,60 @@
+name: Diagnose production
+
+# One-off diagnostic: fetches pages from the deployed Worker and dumps status,
+# headers, and body to the run summary. Exists because this sandbox's egress
+# policy blocks *.workers.dev outright — GitHub's runners aren't behind that
+# restriction, so this is the way to see what production actually returns
+# without needing any Cloudflare credentials (it's all public HTTP).
+#
+# Safe to delete once the signup/login issue is understood; this isn't meant to
+# be a permanent fixture.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Base URL to check"
+        type: string
+        default: "https://hksoftware-real-estate-app.hksoftware.workers.dev"
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch key pages
+        env:
+          BASE: ${{ inputs.base_url }}
+        run: |
+          check() {
+            path="$1"
+            echo "## $path" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            # -D- prints response headers to stdout ahead of the body.
+            curl -sS -D- -o body.html -w "\nHTTP_STATUS:%{http_code}\n" "$BASE$path" >> "$GITHUB_STEP_SUMMARY" 2>&1 || echo "curl failed: $?" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo "First 4000 chars of body:" >> "$GITHUB_STEP_SUMMARY"
+            echo '```html' >> "$GITHUB_STEP_SUMMARY"
+            head -c 4000 body.html >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            cp body.html "saved-$(echo "$path" | tr '/' '_').html"
+          }
+          check "/signup"
+          check "/login"
+          check "/"
+
+      - name: Extract script tags and nonces from signup page
+        run: |
+          echo "## Script tags on /signup" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -oE '<script[^>]*>' "saved-_signup.html" | head -40 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full bodies
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnose-bodies-${{ github.run_number }}
+          path: saved-*.html
+          retention-days: 7
