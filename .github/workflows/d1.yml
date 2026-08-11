@@ -28,6 +28,7 @@ on:
         options:
           - status # read-only: which migrations are applied, which are outstanding
           - tables # read-only: list the tables that actually exist
+          - schema # read-only: dump the full schema, to diff against the migrations
           - apply # apply outstanding migrations (backs up first)
           - backup # export the database and attach it to this run
   push:
@@ -126,6 +127,33 @@ jobs:
             cat migration-status.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Schema without data, so it can be diffed against what the migrations
+      # would have produced. Needed because a database whose tables were created
+      # by hand can match on table *names* while quietly missing indexes or
+      # constraints — and the migration ledger, which is what would normally tell
+      # you, is exactly what's untrustworthy in that situation.
+      - name: Dump the schema
+        if: env.ACTION == 'schema'
+        run: |
+          npx wrangler d1 export "$DB_NAME" --remote --no-data --output=schema.sql -y
+          echo "----- schema.sql -----"
+          cat schema.sql
+          {
+            echo "## Schema"
+            echo
+            echo '```sql'
+            cat schema.sql
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach the schema to this run
+        if: env.ACTION == 'schema'
+        uses: actions/upload-artifact@v4
+        with:
+          name: d1-schema-${{ github.run_number }}
+          path: schema.sql
+          retention-days: 90
 
       - name: Back up the database
         if: env.ACTION == 'apply' || env.ACTION == 'backup'
