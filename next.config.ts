@@ -1,4 +1,16 @@
 import type { NextConfig } from "next";
+import { PRIVATE_PATH_PREFIXES } from "./src/lib/site";
+
+/**
+ * `noindex` as a header rather than a meta tag.
+ *
+ * The meta tags on the private layouts cover HTML pages. They cannot cover the
+ * things under /api — the CSV exports in particular (/api/export/rent-roll and
+ * friends) return a text/csv file containing an entire rent roll, and a file has
+ * nowhere to put a meta tag. X-Robots-Tag is the only way to mark those, and it
+ * is the reason this list exists in addition to the metadata.
+ */
+const NOINDEX = "noindex, nofollow, noarchive, nosnippet";
 
 const nextConfig: NextConfig = {
   // Prisma's client must not be bundled by the server compiler.
@@ -25,6 +37,31 @@ const nextConfig: NextConfig = {
           // amounts show up in plenty of URLs in this app.
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         ],
+      },
+
+      // Belt-and-braces noindex for every private prefix, including the ones
+      // that return files rather than pages. Kept in sync with robots.txt and
+      // the layout metadata through PRIVATE_PATH_PREFIXES in src/lib/site.ts.
+      ...PRIVATE_PATH_PREFIXES.map((prefix) => ({
+        source: `${prefix}/:path*`,
+        headers: [{ key: "X-Robots-Tag", value: NOINDEX }],
+      })),
+      // The prefixes themselves, which the `/:path*` patterns above don't match.
+      ...PRIVATE_PATH_PREFIXES.map((prefix) => ({
+        source: prefix,
+        headers: [{ key: "X-Robots-Tag", value: NOINDEX }],
+      })),
+
+      {
+        /*
+         * The token in these URLs is a working credential (see the note on
+         * src/app/(auth)/reset-password/[token]/page.tsx). `no-referrer` stops it
+         * being sent in a Referer header — the default policy above still sends
+         * the full URL to our own origin, which is every asset request this page
+         * makes, and would put a live password-reset token in access logs.
+         */
+        source: "/:route(reset-password|invite)/:token*",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
     ];
   },

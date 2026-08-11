@@ -17,6 +17,7 @@ future changes. If a section here drifts from the code, the code wins.
 10. [Environments & configuration](#10-environments--configuration)
 11. [Deploying (Cloudflare specifics)](#11-deploying-cloudflare-specifics)
 12. [Testing](#12-testing)
+12a. [Search visibility](#12a-search-visibility-and-keeping-private-pages-out-of-the-index)
 13. [Known gaps & deliberate non-goals](#13-known-gaps--deliberate-non-goals)
 14. [Maintainer runbook](#14-maintainer-runbook)
 
@@ -524,6 +525,63 @@ OpenNext rather than plain `next build` is the point of that first job — the f
 unique to this deployment (a Node-only API reaching into a workerd isolate) only surface
 in the bundling step.
 
+## 12a. Search visibility (and keeping private pages out of the index)
+
+Almost every page in this app renders somebody's private records, so the first job of the
+SEO setup is **exclusion**, not promotion. Only four routes are ever meant to be indexed —
+`/`, `/signup`, `/login`, `/forgot-password` — and they're listed in `PUBLIC_ROUTES` in
+`src/lib/site.ts`.
+
+**Three independent layers keep everything else out**, because a rent ledger or a live
+password-reset link in a search result is a breach, not a ranking problem:
+
+| Layer | File | Covers |
+|---|---|---|
+| `robots.txt` | `src/app/robots.ts` | Asks well-behaved crawlers not to fetch. Cannot stop indexing of a URL someone else links to. |
+| `robots: noindex` metadata | `src/app/{app,portal,owner}/layout.tsx`, the two `[token]` pages | HTML pages. Set on the *layouts*, so a page added later is private by default. |
+| `X-Robots-Tag` header | `next.config.ts` | Everything, including non-HTML — notably the CSV exports under `/api/export/*`, which have nowhere to put a meta tag. |
+
+All three read `PRIVATE_PATH_PREFIXES` from `src/lib/site.ts`, so they can't drift apart.
+Underneath all of them, every one of those routes also requires a session.
+
+The `/invite/[token]` and `/reset-password/[token]` pages get the strictest treatment
+(`noindex, nofollow, noarchive, nosnippet`) plus `Referrer-Policy: no-referrer`, because
+the token in the URL *is* a credential — the default `strict-origin-when-cross-origin`
+would put a working reset token in our own access logs on every asset request.
+
+### Two things that cap what any of this can achieve
+
+1. **`*.workers.dev` is a shared platform domain.** No amount of on-page work makes a
+   subdomain of someone else's domain rank like your own. A custom domain is worth more
+   than everything in this section combined — see §13.
+2. **"Rentwell" is a placeholder** (`src/components/logo.tsx`). Change `SITE.name` in
+   `src/lib/site.ts` and the title template, social cards, JSON-LD organisation and web
+   manifest all follow together.
+
+### Why robots.txt and sitemap.xml are `force-dynamic`
+
+They contain absolute URLs built from `APP_URL`, which reaches production as a **runtime**
+`vars` binding in `wrangler.jsonc` and is therefore *absent during the build*. Prerendered,
+they shipped a sitemap advertising `http://localhost:3000/` — verified, not theoretical.
+Rendering per request costs one trivial render on a URL that's requested a few times a day
+and stays correct through a domain move with no build configuration to remember. The root
+layout's `generateMetadata()` is a function for the same reason.
+
+**On a domain move, change `APP_URL` in `wrangler.jsonc` and nothing else.** Canonicals,
+`og:url`, the sitemap, `robots.txt` and the JSON-LD `@id`s are all derived from it.
+
+### What's deliberately absent
+
+- **No Open Graph image.** `next/og` renders one at runtime but pulls Satori + a resvg WASM
+  binary into the Worker bundle, and the bundle-size headroom here isn't measurable from
+  outside a deploy. It buys nothing for ranking (og:image is not a ranking signal, only a
+  link-preview one), so it wasn't worth risking deployability. Worth adding as a designed
+  static asset when the real brand lands.
+- **No `aggregateRating`, `review` or `offers` in the JSON-LD.** There are no ratings and
+  pricing isn't settled; inventing either to win a rich result is how sites lose rich
+  results.
+- **No blog or content marketing surface.** That's a content decision, not a code one.
+
 ## 13. Known gaps & deliberate non-goals
 
 - **No R2/KV cache bindings.** Next's cache falls back to in-isolate memory. Fine for
@@ -536,7 +594,10 @@ in the bundling step.
   passed unchanged.
 - **No custom domain configured** — production currently lives at the default
   `*.workers.dev` URL. This also blocks zone-level Cloudflare features (rate limiting
-  rules, bot protection, WAF) which need a domain in your own account.
+  rules, bot protection, WAF) which need a domain in your own account, and it is the
+  single largest limit on search visibility (§12a): a shared platform subdomain cannot
+  rank like a domain you own. Everything else in §12a is already in place and needs no
+  code change when the domain moves — only `APP_URL` in `wrangler.jsonc`.
 - **Stripe is optional**, by design, not an oversight — see §5 and `docs/payments.md`.
 - **Point-in-time restore takes the schema with it.** D1's Time Travel restores the whole
   database, structure included — so restoring to a bookmark from before a migration ran

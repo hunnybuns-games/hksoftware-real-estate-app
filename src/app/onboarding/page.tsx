@@ -4,7 +4,11 @@ import { requireUser } from "@/lib/rbac";
 import { CreateOrgForm } from "./_components/create-org-form";
 import { Logo } from "@/components/logo";
 
-export const metadata: Metadata = { title: "Set up your organization" };
+export const metadata: Metadata = {
+  title: "Set up your organization",
+  // Signed-in-only recovery path, and nothing a searcher could act on.
+  robots: { index: false, follow: false },
+};
 
 /**
  * Recovery path for a staff account with no organization. Signup creates both

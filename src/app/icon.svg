@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Rentwell">
+  <!-- Mirrors the wordmark badge in src/components/logo.tsx: a brand-coloured
+       rounded square with an R. Kept as SVG so it stays sharp at every size a
+       browser asks for, including the 16px tab favicon. #1f6f8b is
+       --color-brand-600 from globals.css, resolved out of oklch() because SVG
+       favicons are parsed by contexts that predate oklch support. -->
+  <rect width="32" height="32" rx="7" fill="#1f6f8b"/>
+  <path d="M11 23V9h6.4a4.3 4.3 0 0 1 1.4 8.37L21.6 23h-3.3l-2.5-5H14v5h-3Zm3-7.6h3.1a1.9 1.9 0 0 0 0-3.8H14v3.8Z" fill="#fff"/>
+</svg>

@@ -2,9 +2,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { liveSessionUser } from "@/lib/rbac";
+import { SITE } from "@/lib/site";
 import { LoginForm } from "./_components/login-form";
 
-export const metadata: Metadata = { title: "Sign in" };
+export const metadata: Metadata = {
+  title: "Sign in",
+  description: `Sign in to your ${SITE.name} account to manage properties, leases, rent and maintenance requests.`,
+  alternates: { canonical: "/login" },
+  // Indexable on purpose: a sign-in page is what people land on when they search
+  // the product by name, and it's the page that has to be there when they do.
+  // It carries no private data — the app behind it does.
+  openGraph: { title: `Sign in · ${SITE.name}`, url: "/login" },
+};
 
 export default async function LoginPage({
   searchParams,

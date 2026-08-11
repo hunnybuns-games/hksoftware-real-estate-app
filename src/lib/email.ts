@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { absoluteUrl } from "@/lib/site";
 import type { NotificationType } from "@prisma/client";
 
 /**
@@ -273,9 +274,11 @@ export function sendEmailSafely(input: SendEmailInput): Promise<void> {
   });
 }
 
+/**
+ * Kept as the name every email-building call site already uses; the origin
+ * itself lives in src/lib/site.ts, so a link in an email and a canonical URL on
+ * a page are built from the same value.
+ */
 export function appUrl(path = ""): string {
-  const base =
-    process.env.APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-  return `${base.replace(/\/$/, "")}${path}`;
+  return absoluteUrl(path);
 }

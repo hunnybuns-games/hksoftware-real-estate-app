@@ -2,9 +2,24 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
+import { SITE } from "@/lib/site";
 import { SignupForm } from "./_components/signup-form";
 
-export const metadata: Metadata = { title: "Create your account" };
+/**
+ * The highest-intent public page: someone reading this has already decided to
+ * try the product, so it's the one worth ranking for "<product> sign up" and for
+ * comparison searches that end in a trial.
+ */
+export const metadata: Metadata = {
+  title: "Create your account",
+  description: `Start managing your rentals with ${SITE.name}. Add your properties, units and leases, invite residents, and collect rent by bank transfer — no setup call required.`,
+  alternates: { canonical: "/signup" },
+  openGraph: {
+    title: `Create your ${SITE.name} account`,
+    description: `Start managing your rentals with ${SITE.name} — properties, leases, rent collection and maintenance in one place.`,
+    url: "/signup",
+  },
+};
 
 export default async function SignupPage() {
   const session = await auth();

@@ -3,7 +3,15 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { AcceptInviteForm } from "./_components/accept-invite-form";
 
-export const metadata: Metadata = { title: "Accept your invitation" };
+/**
+ * Same reasoning as reset-password/[token]: the token in this URL creates an
+ * account with a role attached, so the URL is a credential and must never be
+ * indexed, cached or snippeted. See that file for the full note.
+ */
+export const metadata: Metadata = {
+  title: "Accept your invitation",
+  robots: { index: false, follow: false, nocache: true, noarchive: true, nosnippet: true },
+};
 
 export default async function AcceptInvitePage({
   params,

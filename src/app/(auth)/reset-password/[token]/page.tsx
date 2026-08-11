@@ -4,7 +4,22 @@ import { db } from "@/lib/db";
 import { hashResetToken, isRedeemable } from "@/lib/password-reset";
 import { ResetPasswordForm } from "./_components/reset-password-form";
 
-export const metadata: Metadata = { title: "Set a new password" };
+/**
+ * The URL of this page *is* the credential — the token in the path sets a
+ * password on somebody's account. So this is the one page in the app where
+ * noindex matters more than on any private record: a rent ledger in an index is
+ * a disclosure, but a live reset link in an index is account takeover for
+ * whoever reads it first.
+ *
+ * `nofollow` matters as much as `noindex` here: it stops a crawler that reaches
+ * this URL from walking onward and reporting where it had been, and next.config.ts
+ * additionally sends `Referrer-Policy: no-referrer` for this path so the token
+ * can't ride along in a Referer header to anywhere the page links.
+ */
+export const metadata: Metadata = {
+  title: "Set a new password",
+  robots: { index: false, follow: false, nocache: true, noarchive: true, nosnippet: true },
+};
 
 export default async function ResetPasswordPage({
   params,
