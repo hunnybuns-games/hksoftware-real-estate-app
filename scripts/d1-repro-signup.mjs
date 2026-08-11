@@ -14,10 +14,14 @@
 // The point of running in plain Node rather than inside a Worker is that
 // runAction() (src/lib/forms.ts) catches every unexpected exception and
 // returns the same generic "Something went wrong on our end" — which is
-// exactly what's been reported, and which is *why* the real cause has been
-// invisible so far. This script makes the same two database calls signupAction
-// makes, with nothing catching or generalizing the error, so whatever actually
-// throws prints in full: message, stack, and cause.
+// exactly what's been reported, and which is *why* the real cause was
+// invisible until this script found it: D1 throws outright on Prisma's
+// interactive $transaction(async (tx) => {...}) form. signupAction (and 11
+// other call sites) no longer use that form — see the "Not wrapped in
+// $transaction" comments in src/app/(auth)/actions.ts and friends — so this
+// script now mirrors the current, sequential version of signupAction's two
+// database calls, to confirm the fix actually works against the real
+// database rather than just against local sqlite.
 //
 // Cleans up whatever it creates, in a finally block, so a successful run
 // leaves no trace and a failed one leaves at most the one row that failed to
@@ -58,24 +62,22 @@ try {
   const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   console.log("  ->", existing ? "found (unexpected — email should be new)" : "none, as expected");
 
-  console.log("Step 2: the same $transaction signupAction runs — create Organization, then User");
-  await prisma.$transaction(async (tx) => {
-    const org = await tx.organization.create({ data: { name: orgName } });
-    createdOrgId = org.id;
-    console.log("  -> Organization created:", org.id);
+  console.log("Step 2: the same sequential calls signupAction runs — create Organization, then User");
+  const org = await prisma.organization.create({ data: { name: orgName } });
+  createdOrgId = org.id;
+  console.log("  -> Organization created:", org.id);
 
-    const user = await tx.user.create({
-      data: {
-        email,
-        name: "Diagnostic Repro",
-        passwordHash: "not-a-real-hash-this-is-only-a-repro",
-        role: "ADMIN",
-        organizationId: org.id,
-      },
-    });
-    createdUserId = user.id;
-    console.log("  -> User created:", user.id);
+  const user = await prisma.user.create({
+    data: {
+      email,
+      name: "Diagnostic Repro",
+      passwordHash: "not-a-real-hash-this-is-only-a-repro",
+      role: "ADMIN",
+      organizationId: org.id,
+    },
   });
+  createdUserId = user.id;
+  console.log("  -> User created:", user.id);
 
   console.log("\nBoth writes succeeded. Signup's own database logic is NOT what's failing.");
 } catch (err) {
