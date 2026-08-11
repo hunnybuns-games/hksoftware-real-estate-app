@@ -76,6 +76,21 @@ jobs:
             echo "::error::CLOUDFLARE_API_TOKEN is not set — see this run's summary for setup steps."
             exit 1
           fi
+          # A token scoped to just D1 can't list the account it belongs to, so
+          # Wrangler has no way to infer one and fails with an unhelpful auth error
+          # rather than "you're missing a variable". Called out here so that failure
+          # is legible if it happens.
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            {
+              echo "### \`CLOUDFLARE_ACCOUNT_ID\` is not set"
+              echo
+              echo "Wrangler will try to infer the account. A token scoped to D1 alone often"
+              echo "can't enumerate accounts, so if the next step fails on authentication,"
+              echo "this is why — add the secret and re-run. Find the ID in the Cloudflare"
+              echo "dashboard sidebar, or in any dashboard URL right after \`/accounts/\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::CLOUDFLARE_ACCOUNT_ID is not set; Wrangler will try to infer the account."
+          fi
 
       - uses: actions/checkout@v4
 
