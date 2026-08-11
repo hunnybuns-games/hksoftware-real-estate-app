@@ -29,6 +29,7 @@ on:
           - status # read-only: which migrations are applied, which are outstanding
           - tables # read-only: list the tables that actually exist
           - schema # read-only: dump the full schema, to diff against the migrations
+          - peek # read-only: counts + most recent Organizations/Users, to see if signups are landing
           - apply # apply outstanding migrations (backs up first)
           - backup # export the database and attach it to this run
           - repair-ledger # one-off: record the two hand-applied migrations (see scripts/d1-repair-ledger.sql)
@@ -155,6 +156,29 @@ jobs:
           name: d1-schema-${{ github.run_number }}
           path: schema.sql
           retention-days: 90
+
+      # Answers one question: are signup attempts reaching the database at all?
+      # Deliberately never selects passwordHash, tokenHash, or
+      # accessTokenEncrypted — this exists to see whether rows are being created,
+      # not to expose anything that would matter if it leaked into a log.
+      - name: Recent signups
+        if: env.ACTION == 'peek'
+        run: |
+          run_sql() {
+            echo "-- $1"
+            npx wrangler d1 execute "$DB_NAME" --remote --command="$1"
+            echo
+          }
+          {
+            echo "## Recent signups"
+            echo
+            echo '```'
+            run_sql "SELECT COUNT(*) AS organizations FROM Organization;"
+            run_sql "SELECT COUNT(*) AS users FROM User;"
+            run_sql "SELECT id, name, createdAt FROM Organization ORDER BY createdAt DESC LIMIT 8;"
+            run_sql "SELECT id, email, role, organizationId, createdAt, lastLoginAt FROM User ORDER BY createdAt DESC LIMIT 8;"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Back up the database
         if: env.ACTION == 'apply' || env.ACTION == 'backup' || env.ACTION == 'repair-ledger'
