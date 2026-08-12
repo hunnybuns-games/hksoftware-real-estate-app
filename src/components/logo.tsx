@@ -1,8 +1,10 @@
 import clsx from "clsx";
 
 /**
- * "Rentwell" is a placeholder name — swap the wordmark here and the metadata in
- * src/app/layout.tsx when the real brand lands.
+ * The wordmark. The name itself lives in SITE.name (src/lib/site.ts) — this file
+ * is the artwork, and the two matching monograms are src/app/icon.svg and
+ * src/app/apple-icon.png (regenerate the latter with
+ * scripts/generate-apple-icon.mjs).
  */
 export function Logo({ className, compact = false }: { className?: string; compact?: boolean }) {
   return (
@@ -11,10 +13,10 @@ export function Logo({ className, compact = false }: { className?: string; compa
         aria-hidden
         className="grid size-7 place-items-center rounded-lg bg-brand-600 text-[13px] font-bold text-white"
       >
-        R
+        C
       </span>
       {!compact ? (
-        <span className="text-[15px] font-semibold tracking-tight text-slate-900">Rentwell</span>
+        <span className="text-[15px] font-semibold tracking-tight text-slate-900">ComfyLease</span>
       ) : null}
     </span>
   );

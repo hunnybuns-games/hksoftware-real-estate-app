@@ -28,36 +28,28 @@ const WHITE = [0xff, 0xff, 0xff];
 // square. Rounding it here too would show as a dark fringe inside Apple's mask.
 
 /**
- * Coverage of the letter R at a point, in the unit square. Returns 0..1 so the
+ * Coverage of the letter C at a point, in the unit square. Returns 0..1 so the
  * caller can supersample — a hard boolean here is what makes hand-rolled icons
  * look jagged at 180px.
+ *
+ * A C is an annulus with a wedge taken out of the right side, which is both the
+ * simplest description and the one that keeps the stroke weight even the whole
+ * way round. Matches the stroked arc in src/app/icon.svg.
  */
 function inLetter(x, y) {
-  // Stem.
-  if (x >= 0.2 && x <= 0.37 && y >= 0.17 && y <= 0.83) return true;
+  const dx = x - 0.5;
+  const dy = y - 0.5;
+  const dist = Math.hypot(dx, dy);
 
-  const ellipse = (cx, cy, rx, ry) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
+  const OUTER = 0.34;
+  const INNER = 0.21;
+  if (dist < INNER || dist > OUTER) return false;
 
-  // Bowl: the ring between two ellipses, upper half only, right of the stem.
-  if (y >= 0.17 && y <= 0.54 && x >= 0.3) {
-    if (ellipse(0.4, 0.355, 0.3, 0.19) && !ellipse(0.4, 0.355, 0.15, 0.082)) return true;
-  }
+  // The opening: a 90° wedge pointing right (|dy| < dx), so the terminals sit at
+  // 45° above and below the horizontal, as in the SVG.
+  if (dx > 0 && Math.abs(dy) < dx) return false;
 
-  // Leg: a thick segment from under the bowl down to the baseline.
-  const x0 = 0.42;
-  const y0 = 0.5;
-  const x1 = 0.73;
-  const y1 = 0.83;
-  const dx = x1 - x0;
-  const dy = y1 - y0;
-  const t = ((x - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy);
-  if (t >= 0 && t <= 1) {
-    const px = x0 + t * dx;
-    const py = y0 + t * dy;
-    if (Math.hypot(x - px, y - py) <= 0.085) return true;
-  }
-
-  return false;
+  return true;
 }
 
 const SUPERSAMPLE = 4;

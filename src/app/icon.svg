@@ -1,9 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Rentwell">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="ComfyLease">
   <!-- Mirrors the wordmark badge in src/components/logo.tsx: a brand-coloured
-       rounded square with an R. Kept as SVG so it stays sharp at every size a
+       rounded square with a C. Kept as SVG so it stays sharp at every size a
        browser asks for, including the 16px tab favicon. #1f6f8b is
        --color-brand-600 from globals.css, resolved out of oklch() because SVG
-       favicons are parsed by contexts that predate oklch support. -->
+       favicons are parsed by contexts that predate oklch support.
+
+       The C is a stroked 270° arc rather than a filled outline: one path, and the
+       weight stays even all the way round, which a hand-built outline at this
+       size does not. -->
   <rect width="32" height="32" rx="7" fill="#1f6f8b"/>
-  <path d="M11 23V9h6.4a4.3 4.3 0 0 1 1.4 8.37L21.6 23h-3.3l-2.5-5H14v5h-3Zm3-7.6h3.1a1.9 1.9 0 0 0 0-3.8H14v3.8Z" fill="#fff"/>
+  <path d="M20.6 11.4A6.5 6.5 0 1 0 20.6 20.6" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
 </svg>

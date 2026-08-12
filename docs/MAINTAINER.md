@@ -549,14 +549,36 @@ The `/invite/[token]` and `/reset-password/[token]` pages get the strictest trea
 the token in the URL *is* a credential — the default `strict-origin-when-cross-origin`
 would put a working reset token in our own access logs on every asset request.
 
-### Two things that cap what any of this can achieve
+### The domain move (in progress)
 
-1. **`*.workers.dev` is a shared platform domain.** No amount of on-page work makes a
-   subdomain of someone else's domain rank like your own. A custom domain is worth more
-   than everything in this section combined — see §13.
-2. **"Rentwell" is a placeholder** (`src/components/logo.tsx`). Change `SITE.name` in
-   `src/lib/site.ts` and the title template, social cards, JSON-LD organisation and web
-   manifest all follow together.
+`comfylease.com` is registered at Namecheap. Until it is serving the app, this section's
+work is capped by the same thing that caps outbound email: `*.workers.dev` is a shared
+platform domain, and no amount of on-page work makes a subdomain of someone else's domain
+rank like your own.
+
+The canonical host is the **apex**, `comfylease.com`; `www` 301s to it via a Cloudflare
+Redirect Rule rather than application code, so only one host is ever indexable.
+
+Remaining steps, in order — the first two are the long pole because nameserver propagation
+is not instant:
+
+1. Add `comfylease.com` as a zone in the Cloudflare account that holds this Worker.
+2. At Namecheap, switch **Nameservers** from `Namecheap BasicDNS` to the two Cloudflare
+   nameservers the zone setup gives you. The existing Namecheap "Redirect Domain" rule
+   (apex → www) stops applying at that point, which is intended — it's replaced by the
+   Redirect Rule in step 5, pointing the other way.
+3. Workers → this Worker → Settings → Domains & Routes → add `comfylease.com` as a custom
+   domain.
+4. **Add `comfylease.com` to the existing Cloudflare Access application.** Access policies
+   are bound per hostname: the app protecting `*.workers.dev` does *not* cover a new
+   custom domain, so skipping this publishes the whole app.
+5. Add a Redirect Rule: `www.comfylease.com/*` → `https://comfylease.com/$1`, 301.
+6. Set `APP_URL` in `wrangler.jsonc` `vars` to `https://comfylease.com` — **only once the
+   domain actually serves the app.** It is not just cosmetic: it builds Stripe Connect's
+   return URLs and the webhook URL registered with Plaid, so pointing it at a host that
+   doesn't resolve breaks both.
+
+Then email becomes possible — see §8 and the transport notes in `src/lib/email.ts`.
 
 ### Why robots.txt and sitemap.xml are `force-dynamic`
 
@@ -592,12 +614,13 @@ layout's `generateMetadata()` is a function for the same reason.
   switch: no raw SQL, no Postgres-native column types), so moving to D1/SQLite didn't
   require re-verifying its correctness — only re-running the existing test suites, which
   passed unchanged.
-- **No custom domain configured** — production currently lives at the default
-  `*.workers.dev` URL. This also blocks zone-level Cloudflare features (rate limiting
-  rules, bot protection, WAF) which need a domain in your own account, and it is the
-  single largest limit on search visibility (§12a): a shared platform subdomain cannot
-  rank like a domain you own. Everything else in §12a is already in place and needs no
-  code change when the domain moves — only `APP_URL` in `wrangler.jsonc`.
+- **Custom domain registered but not yet serving.** `comfylease.com` is bought;
+  production still answers on the default `*.workers.dev` URL until the steps in §12a are
+  done. Three things are waiting on it: outbound email (Cloudflare Email Service can only
+  send from a domain you've onboarded — §8), search visibility (a shared platform
+  subdomain cannot rank like a domain you own — §12a), and zone-level Cloudflare features
+  (rate limiting rules, bot protection, WAF) which need a domain in your own account.
+  No code changes are needed beyond `APP_URL`.
 - **Stripe is optional**, by design, not an oversight — see §5 and `docs/payments.md`.
 - **Point-in-time restore takes the schema with it.** D1's Time Travel restores the whole
   database, structure included — so restoring to a bookmark from before a migration ran

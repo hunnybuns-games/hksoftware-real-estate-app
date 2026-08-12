@@ -3,22 +3,25 @@
  * brand, the copy search engines and social cards quote, and the origin every
  * absolute URL is built from.
  *
- * It's centralised because two of these are placeholders that will change:
+ * Centralised so the name and the origin each have exactly one definition:
  *
- *  - **The name.** "Rentwell" is a working title (see src/components/logo.tsx).
- *    Changing SITE.name here updates the title template, the social cards, the
- *    JSON-LD organisation, and the web manifest together, so they can't drift
- *    apart or leave the old name behind in a metadata field nobody looks at.
- *  - **The origin.** APP_URL is a `*.workers.dev` subdomain today. That is a
- *    shared platform domain, and no amount of on-page work makes a subdomain of
- *    someone else's domain rank like your own — moving to a custom domain is
- *    worth more than everything else in this file combined. When it moves, set
- *    APP_URL (wrangler.jsonc `vars`) and every canonical, sitemap entry, and
- *    Open Graph URL follows.
+ *  - **The name.** SITE.name feeds the title template, the social cards, the
+ *    JSON-LD organisation, and the web manifest, so they can't drift apart or
+ *    leave an old name behind in a metadata field nobody looks at. The wordmark
+ *    in src/components/logo.tsx and the two icons are the only other places the
+ *    brand appears, and they're deliberately separate because they're artwork.
+ *  - **The origin.** Set by APP_URL (wrangler.jsonc `vars`); every canonical,
+ *    sitemap entry, Open Graph URL and email link is derived from it, so a
+ *    domain move is that one value and nothing else.
+ *
+ * The canonical host is the apex, `comfylease.com`. `www` redirects to it at the
+ * edge (a Cloudflare Redirect Rule, not application code) — one host is
+ * indexable and the other is a 301, which is what keeps the two from competing
+ * as duplicates.
  */
 
 export const SITE = {
-  name: "Rentwell",
+  name: "ComfyLease",
   /** Used where the name alone is ambiguous — page titles, card headings. */
   tagline: "Property management software for independent landlords",
   /**
