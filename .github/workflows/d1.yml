@@ -32,9 +32,14 @@ on:
           - peek # read-only: counts + most recent Organizations/Users, to see if signups are landing
           - repro-signup # runs signupAction's exact DB calls from plain Node — see scripts/d1-repro-signup.mjs
           - email-status # read-only: is the nightly cron running, and is email actually being delivered
+          - create-test-user # one-off: creates a real Organization+ADMIN User, for testing flows that need one — see scripts/d1-create-test-user.mjs
           - apply # apply outstanding migrations (backs up first)
           - backup # export the database and attach it to this run
           - repair-ledger # one-off: record the two hand-applied migrations (see scripts/d1-repair-ledger.sql)
+      test_user_email:
+        description: "Only for create-test-user: the email to create the account under. Must already be a verified Cloudflare Email Routing destination, or a password-reset email to it will just fail rather than deliver."
+        type: string
+        default: ""
   push:
     paths:
       - "migrations/**"
@@ -239,6 +244,22 @@ jobs:
           set -o pipefail
           npx prisma generate
           node scripts/d1-repro-signup.mjs 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # See scripts/d1-create-test-user.mjs. Same "generate before importing
+      # @prisma/client directly" reasoning as the repro-signup step above.
+      - name: Create a test user
+        if: env.ACTION == 'create-test-user'
+        env:
+          CLOUDFLARE_DATABASE_ID: 7b7e8815-d2f6-4de9-8948-b840936fadc4
+          TEST_USER_EMAIL: ${{ inputs.test_user_email }}
+        run: |
+          set -o pipefail
+          if [ -z "$TEST_USER_EMAIL" ]; then
+            echo "::error::test_user_email input is required for create-test-user."
+            exit 1
+          fi
+          npx prisma generate
+          node scripts/d1-create-test-user.mjs 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Back up the database
         if: env.ACTION == 'apply' || env.ACTION == 'backup' || env.ACTION == 'repair-ledger'
