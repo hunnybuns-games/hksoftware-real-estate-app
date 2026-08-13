@@ -132,19 +132,35 @@
     //
     // Belongs here rather than in the dashboard: Workers Builds deploys by
     // running `wrangler deploy`, which replaces the deployed vars with this
-    // block, so a dashboard-only value gets wiped on the next push. Update this
-    // line when you move to a custom domain.
+    // block, so a dashboard-only value gets wiped on the next push.
     //
     // Deliberately no AUTH_URL: src/lib/auth.ts sets trustHost, so Auth.js
     // derives its own URLs from the incoming request. That's strictly better
     // here — it stays correct on workers.dev and on a custom domain without
     // anyone remembering to change a second setting.
-    "APP_URL": "https://hksoftware-real-estate-app.hksoftware.workers.dev"
+    "APP_URL": "https://comfylease.com",
+
+    // Enables outbound email — see the send_email binding above and the
+    // transport notes at the top of src/lib/email.ts. Address is on
+    // comfylease.com, which is now onboarded to Cloudflare Email Routing (its
+    // MX/DKIM/SPF records show Locked/Enabled in the dashboard).
+    //
+    // Still only reaches *verified destination addresses* in the account until
+    // this Worker is on the Paid plan — see the send_email binding's comment
+    // above for the exact limits. Fine for now: it's enough to test the whole
+    // flow end to end against a verified inbox before opening it up to real
+    // residents.
+    "EMAIL_FROM": "notifications@comfylease.com"
   }
   // Secrets (set with `npx wrangler secret put <NAME>`, never in this file):
   //   AUTH_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, CRON_SECRET,
   //   PLAID_CLIENT_ID, PLAID_SECRET, BANK_TOKEN_ENCRYPTION_KEY
+  //
+  // CRON_SECRET in particular is still unset as of this comment — the nightly
+  // rent run has been 401ing every night with no charges posted. Not an email
+  // problem, but it's sitting right next to one; see docs/MAINTAINER.md §14.
+  //
   // Non-secret vars you likely also want to add above once deployed:
-  //   AUTH_URL, APP_URL (your production origin), STRIPE_APPLICATION_FEE_BPS,
+  //   AUTH_URL, STRIPE_APPLICATION_FEE_BPS,
   //   PLAID_ENV ("production" once you're off Sandbox — defaults to "sandbox")
 }
