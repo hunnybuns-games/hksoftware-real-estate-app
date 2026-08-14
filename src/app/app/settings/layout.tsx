@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui";
 import { NavLink } from "@/components/nav-link";
@@ -10,7 +12,19 @@ const tabs: { href: string; label: string; exact?: boolean }[] = [
 ];
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
-  await requireStaff();
+  const ctx = await requireStaff();
+
+  // Runs above the org-settings page's loading.tsx Suspense boundary — see
+  // ../properties/[propertyId]/layout.tsx for why that placement matters.
+  // requireStaff() already sends a session with no live organization to
+  // onboarding, so reaching here without one means the row vanished between
+  // that check and this one — vanishingly unlikely, but worth a real 404
+  // rather than every settings tab rendering silently empty.
+  const org = await db.organization.findUnique({
+    where: { id: ctx.organizationId },
+    select: { id: true },
+  });
+  if (!org) notFound();
 
   return (
     <>

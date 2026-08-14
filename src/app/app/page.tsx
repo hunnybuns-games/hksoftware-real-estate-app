@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";
 import { getPortfolioSummary } from "@/lib/portfolio";

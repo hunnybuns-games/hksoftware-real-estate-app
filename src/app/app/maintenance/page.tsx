@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";

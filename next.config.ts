@@ -17,25 +17,6 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
   typedRoutes: false,
 
-  experimental: {
-    /*
-     * Required for <Link unstable_dynamicOnHover> to do anything (see
-     * src/components/nav-link.tsx). Without this flag the prop is silently
-     * inert — Next still upgrades the prefetch's *priority* on hover, but not
-     * its *kind*, so the page's actual data never gets fetched early; hovering
-     * would look identical to not hovering at all. Confirmed by reading
-     * node_modules/next/dist/client/components/links.js rather than assumed:
-     * the upgrade to a full fetch is explicitly gated on
-     * `process.env.__NEXT_DYNAMIC_ON_HOVER`, which this flag sets at build time.
-     *
-     * `unstable_` in the prop name is Next's own naming, not a caveat this repo
-     * added — the shape (or the flag) could change in a future Next release
-     * without a major version bump. If an upgrade breaks it, the fallback is
-     * simply the current no-head-start behavior, not an error.
-     */
-    dynamicOnHover: true,
-  },
-
   // Baseline hardening headers on every response. The Content-Security-Policy
   // is deliberately NOT here: it carries a per-request nonce, so it can't be a
   // static string. It lives in src/middleware.ts — read the comment at the top
