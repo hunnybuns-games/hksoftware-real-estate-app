@@ -49,6 +49,9 @@ const browser = await launchBrowser();
 
   const firstPropertyHref = await page.locator('a[href^="/app/reports/"]').first().getAttribute("href");
   await page.goto(`${BASE}${firstPropertyHref}`);
+  // isVisible() doesn't wait, and the streamed content lands a beat after
+  // the load event does.
+  await page.locator("text=Income").first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
   check("property P&L page renders", await page.locator("text=Income").first().isVisible());
   check(
     "property P&L page has export link",
@@ -75,12 +78,12 @@ const browser = await launchBrowser();
   const chargesMissingResp = await fetchCsv(page, "/api/export/charges");
   check("charges export 400s without leaseId", chargesMissingResp.status() === 400);
 
-  // Lease ledger page has export links wired in.
+  // Lease ledger page has export links wired in. isVisible() doesn't wait,
+  // and the streamed content lands a beat after the load event does.
   await page.goto(`${BASE}${leaseHref}`);
-  check(
-    "lease ledger has charges export link",
-    await page.locator(`a[href="/api/export/charges?leaseId=${leaseId}"]`).first().isVisible(),
-  );
+  const chargesLink = page.locator(`a[href="/api/export/charges?leaseId=${leaseId}"]`).first();
+  await chargesLink.waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
+  check("lease ledger has charges export link", await chargesLink.isVisible());
   check(
     "lease ledger has payments export link",
     await page.locator(`a[href="/api/export/payments?leaseId=${leaseId}"]`).first().isVisible(),
@@ -93,7 +96,7 @@ const browser = await launchBrowser();
   await expenseForm.locator('input[name="amountCents"]').fill("125.00");
   await expenseForm.locator('input[name="description"]').fill("Smoke test expense");
   await expenseForm.locator('button[type="submit"]').click();
-  await page.waitForTimeout(1000);
+  await page.locator("text=Smoke test expense").first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
   check("expense shows up in the expenses table", await page.locator("text=Smoke test expense").first().isVisible());
 
   await ctx.close();
@@ -110,6 +113,7 @@ const browser = await launchBrowser();
   check("owner dashboard links to a statement page", !!statementHref);
 
   await page.goto(`${BASE}${statementHref}`);
+  await page.locator("text=Income").first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
   check("owner statement page renders", await page.locator("text=Income").first().isVisible());
 
   // An owner must not be able to fetch a property they don't own.

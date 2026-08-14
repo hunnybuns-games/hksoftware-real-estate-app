@@ -54,6 +54,9 @@ const browser = await launchBrowser();
 
   await page.click("text=Cedar Court");
   await page.waitForURL(/\/app\/properties\/[a-z0-9]+$/, { timeout: 15000 });
+  // Client-side nav resolves the URL as soon as the loading.tsx skeleton
+  // commits — wait for the streamed content itself before reading it.
+  await page.waitForSelector("text=Vacancy loss", { timeout: 10000 });
   const detail = await page.textContent("body");
   log("property detail shows units + vacancy loss",
     /Vacancy loss/.test(detail) && /Units/.test(detail));
@@ -72,6 +75,7 @@ const browser = await launchBrowser();
     page.waitForURL(/\/app\/properties\/[a-z0-9]{20,}$/, { timeout: 20000 }),
     page.locator("main form").filter({ hasText: "Add property" }).locator('button[type="submit"]').click(),
   ]);
+  await page.waitForSelector("text=Birch Row", { timeout: 10000 });
   log("created a property and redirected to it", /Birch Row/.test(await page.textContent("body")));
 
   // Add a unit to it (nested create on the empty-state form)
@@ -118,6 +122,7 @@ const browser = await launchBrowser();
   await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
   await page.locator('a:has-text("Open")').first().click();
   await page.waitForURL(/\/app\/leases\/[a-z0-9]+$/, { timeout: 15000 });
+  await page.waitForSelector("text=Billed to date", { timeout: 10000 });
   const ledger = await page.textContent("body");
   log("lease ledger shows charges and balance",
     /Charges/.test(ledger) && /Billed to date/.test(ledger) && /past due/i.test(ledger));
@@ -162,6 +167,7 @@ const browser = await launchBrowser();
 
   await page.click("text=No hot water in the shower");
   await page.waitForURL(/\/app\/maintenance\/[a-z0-9]+$/, { timeout: 15000 });
+  await page.waitForSelector("text=What was reported", { timeout: 10000 });
   log("request detail renders", /What was reported/.test(await page.textContent("body")));
 
   // Update status + notify tenant

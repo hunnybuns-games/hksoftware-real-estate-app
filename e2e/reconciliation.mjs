@@ -73,7 +73,8 @@ await page.waitForTimeout(200);
 await page.locator('input[name="subsidyOwedCents"]').fill("450");
 await page.locator('input[name="subsidyPayerName"]').fill("E2E Housing Authority");
 await page.locator('main form:has(input[name="rentAmountCents"]) button[type="submit"]').click();
-await page.waitForTimeout(2500);
+await page.waitForSelector("text=Rent split", { timeout: 10000 }).catch(() => {});
+await page.waitForTimeout(500);
 const afterSplit = await page.textContent("body");
 log("lease form saves a subsidy split and summary reflects it",
   /Rent split/.test(afterSplit) && /E2E Housing Authority/.test(afterSplit));
@@ -109,6 +110,7 @@ await Promise.all([
   page.waitForURL(/\/app\/payments\/import\/[a-z0-9]+$/, { timeout: 20000 }),
   page.locator('main form button[type="submit"]').click(),
 ]);
+await page.waitForSelector("text=Test payment from e2e suite", { timeout: 10000 }).catch(() => {});
 const reviewBody = await page.textContent("body");
 log("import review page shows the parsed rows", /Test payment from e2e suite/.test(reviewBody));
 log("import review flags bad rows with a reason", /Negative amount|Zero amount|Couldn't read an amount/.test(reviewBody));

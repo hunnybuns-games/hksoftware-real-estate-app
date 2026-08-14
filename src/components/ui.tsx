@@ -82,6 +82,65 @@ export function StatTile({
   );
 }
 
+/**
+ * Placeholder building blocks for `loading.tsx` files.
+ *
+ * Every list→detail click in the app (a tenant row, a property, a lease…)
+ * lands on a dynamically rendered page — it reads the session and queries the
+ * database on every request, so it can't be prebuilt, and with no loading.tsx
+ * present the browser just sits frozen until that round trip finishes. These
+ * don't make the query faster; they make the click feel instant by showing
+ * the shape of the page immediately, with the real content streaming in
+ * behind it. Composed into each page's actual layout (a stat row here, a
+ * two-column card grid there) rather than one generic spinner everywhere,
+ * because a skeleton that doesn't resemble what's coming doesn't read as
+ * "loading this page" — it just reads as a flash before a layout jump.
+ */
+export function Skeleton({ className }: { className?: string }) {
+  return <div aria-hidden className={clsx("animate-pulse rounded-md bg-slate-200", className)} />;
+}
+
+/** Matches PageHeader's shape. */
+export function PageHeaderSkeleton({ withAction = true }: { withAction?: boolean }) {
+  return (
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-48" />
+        <Skeleton className="h-4 w-32" />
+      </div>
+      {withAction ? <Skeleton className="h-9 w-28 rounded-lg" /> : null}
+    </div>
+  );
+}
+
+/** Matches StatTile's shape, for the stat rows above several detail pages. */
+export function StatTileSkeleton() {
+  return (
+    <div className="card space-y-2 p-5">
+      <Skeleton className="h-3 w-16" />
+      <Skeleton className="h-7 w-20" />
+    </div>
+  );
+}
+
+/** Matches Card's shape — a titled block with a few placeholder lines inside. */
+export function CardSkeleton({ lines = 3, title = true }: { lines?: number; title?: boolean }) {
+  return (
+    <section className="card">
+      {title ? (
+        <div className="border-b border-slate-200 px-5 py-4">
+          <Skeleton className="h-4 w-24" />
+        </div>
+      ) : null}
+      <div className="space-y-3 p-5">
+        {Array.from({ length: lines }).map((_, i) => (
+          <Skeleton key={i} className="h-4 w-full" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 type BadgeTone = "neutral" | "green" | "amber" | "red" | "blue" | "slate";
 
 /*

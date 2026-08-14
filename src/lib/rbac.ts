@@ -137,19 +137,25 @@ export type OwnerContext = SessionUser & {
   propertyIds: string[];
 };
 
+/**
+ * Cached the same way loadLiveUser is — an owner's report layout and its page
+ * both call requireOwner(), and this is the query that would otherwise run
+ * twice per request.
+ */
+const loadOwnerPropertyIds = cache(async (userId: string, organizationId: string): Promise<string[]> => {
+  const links = await db.propertyOwner.findMany({
+    where: { userId, property: { organizationId } },
+    select: { propertyId: true },
+  });
+  return links.map((l) => l.propertyId);
+});
+
 /** OWNER — read-only, limited to the properties explicitly assigned to them. */
 export async function requireOwner(): Promise<OwnerContext> {
   const user = await requireUser();
   if (user.role !== "OWNER" || !user.organizationId) redirect(homeFor(user));
-  const links = await db.propertyOwner.findMany({
-    where: { userId: user.id, property: { organizationId: user.organizationId } },
-    select: { propertyId: true },
-  });
-  return {
-    ...user,
-    organizationId: user.organizationId,
-    propertyIds: links.map((l) => l.propertyId),
-  };
+  const propertyIds = await loadOwnerPropertyIds(user.id, user.organizationId);
+  return { ...user, organizationId: user.organizationId, propertyIds };
 }
 
 /**
@@ -233,15 +239,6 @@ export async function assertTenant(): Promise<TenantContext> {
 export async function assertOwner(): Promise<OwnerContext> {
   const u = await liveUserOrThrow();
   if (u.role !== "OWNER" || !u.organizationId) throw new AuthorizationError();
-
-  const links = await db.propertyOwner.findMany({
-    where: { userId: u.id, property: { organizationId: u.organizationId } },
-    select: { propertyId: true },
-  });
-
-  return {
-    ...u,
-    organizationId: u.organizationId,
-    propertyIds: links.map((l) => l.propertyId),
-  };
+  const propertyIds = await loadOwnerPropertyIds(u.id, u.organizationId);
+  return { ...u, organizationId: u.organizationId, propertyIds };
 }
