@@ -11,9 +11,22 @@ export function Logo({ className, compact = false }: { className?: string; compa
     <span className={clsx("inline-flex items-center gap-2", className)}>
       <span
         aria-hidden
-        className="grid size-7 place-items-center rounded-lg bg-brand-600 text-[13px] font-bold text-white"
+        className="grid size-7 place-items-center rounded-lg bg-brand-600"
       >
-        C
+        <svg
+          viewBox="0 0 32 32"
+          className="size-4"
+          fill="none"
+          stroke="#fff"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M6 19 16 7 26 19" />
+          <path d="M5 26h22" />
+          <path d="M9 17V9h4v8" />
+          <rect x="13" y="20" width="6" height="6" />
+        </svg>
       </span>
       {!compact ? (
         <span className="text-[15px] font-semibold tracking-tight text-slate-900">ComfyLease</span>

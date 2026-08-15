@@ -4,7 +4,7 @@
  * adds this app to their home screen.
  *
  * Why a generator instead of a committed binary someone drew once: the icon is
- * derived from exactly two things, the brand colour and the letterform in
+ * derived from exactly two things, the brand colour and the mark in
  * src/components/logo.tsx, and both will change when the real brand lands. A
  * script means the next person can change SITE.themeColor and re-run this,
  * rather than opening a design tool to work out what shade of blue a stray PNG
@@ -28,28 +28,48 @@ const WHITE = [0xff, 0xff, 0xff];
 // square. Rounding it here too would show as a dark fringe inside Apple's mask.
 
 /**
- * Coverage of the letter C at a point, in the unit square. Returns 0..1 so the
- * caller can supersample — a hard boolean here is what makes hand-rolled icons
- * look jagged at 180px.
- *
- * A C is an annulus with a wedge taken out of the right side, which is both the
- * simplest description and the one that keeps the stroke weight even the whole
- * way round. Matches the stroked arc in src/app/icon.svg.
+ * The mark, as a list of line segments in the same 32-unit space as
+ * src/app/icon.svg's viewBox, normalised to the unit square (so it stays
+ * correct regardless of the SIZE this file is rasterised at). A peaked roof,
+ * a chimney rising off its left slope (open at the bottom — it reads as
+ * growing out of the roofline), a door, and the ground line beneath.
+ */
+const SEGMENTS = [
+  // roof: two slopes sharing the peak
+  [16, 7, 6, 19],
+  [16, 7, 26, 19],
+  // ground line
+  [5, 26, 27, 26],
+  // chimney: left, top, right — open at the bottom, on purpose
+  [9, 17, 9, 9],
+  [9, 9, 13, 9],
+  [13, 9, 13, 17],
+  // door: closed rectangle
+  [13, 20, 19, 20],
+  [19, 20, 19, 26],
+  [19, 26, 13, 26],
+  [13, 26, 13, 20],
+].map(([x1, y1, x2, y2]) => [x1 / 32, y1 / 32, x2 / 32, y2 / 32]);
+
+// Matches icon.svg's stroke-width="2.4" in the same 32-unit space.
+const STROKE_HALF_WIDTH = 2.4 / 32 / 2;
+
+function distanceToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+/**
+ * Coverage of the mark at a point, in the unit square. Returns a boolean so
+ * the caller can supersample — a hard boolean here is what makes hand-rolled
+ * icons look jagged at 180px, hence the 4x4 supersampling in coverage() below
+ * rather than antialiasing this function itself.
  */
 function inLetter(x, y) {
-  const dx = x - 0.5;
-  const dy = y - 0.5;
-  const dist = Math.hypot(dx, dy);
-
-  const OUTER = 0.34;
-  const INNER = 0.21;
-  if (dist < INNER || dist > OUTER) return false;
-
-  // The opening: a 90° wedge pointing right (|dy| < dx), so the terminals sit at
-  // 45° above and below the horizontal, as in the SVG.
-  if (dx > 0 && Math.abs(dy) < dx) return false;
-
-  return true;
+  return SEGMENTS.some(([x1, y1, x2, y2]) => distanceToSegment(x, y, x1, y1, x2, y2) < STROKE_HALF_WIDTH);
 }
 
 const SUPERSAMPLE = 4;
