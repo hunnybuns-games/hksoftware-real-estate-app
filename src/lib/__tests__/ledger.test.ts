@@ -3,6 +3,7 @@ import {
   type BillableLease,
   billedPeriodKey,
   computeBalance,
+  nextScheduledCharge,
   pendingRentCharges,
 } from "@/lib/ledger";
 import { utcDate } from "@/lib/dates";
@@ -298,6 +299,90 @@ describe("pendingRentCharges", () => {
 
   it("bills nothing for a lease starting after the current month", () => {
     expect(run([lease({ startDate: utcDate(2026, 10, 1) })])).toEqual([]);
+  });
+});
+
+describe("nextScheduledCharge", () => {
+  const lease = (
+    over: Partial<{
+      startDate: Date;
+      endDate: Date | null;
+      rentAmountCents: number;
+      rentDueDay: number;
+      status: "DRAFT" | "ACTIVE" | "ENDED";
+    }> = {},
+  ) => ({
+    startDate: utcDate(2026, 6, 1),
+    endDate: null,
+    rentAmountCents: 180_000,
+    rentDueDay: 1,
+    status: "ACTIVE" as const,
+    ...over,
+  });
+
+  const emptyBalance = computeBalance({ charges: [], payments: [], graceDays: 5 });
+
+  it("projects the lease's start month when nothing has been charged yet", () => {
+    // The case a landlord actually asks "upcoming payments" for: a lease
+    // that's active but whose term — and billing — hasn't started.
+    const next = nextScheduledCharge(
+      lease({ startDate: utcDate(2026, 9, 1) }),
+      [],
+      emptyBalance,
+    );
+    expect(next).toEqual({ dueDate: utcDate(2026, 9, 1), amountCents: 180_000 });
+  });
+
+  it("projects the month after the latest billed period once that's fully paid", () => {
+    const charges = [charge(180_000, utcDate(2026, 6, 1))];
+    const balance = computeBalance({
+      charges,
+      payments: [payment(180_000, "SUCCEEDED")],
+      graceDays: 5,
+    });
+    const next = nextScheduledCharge(lease(), charges, balance);
+    expect(next).toEqual({ dueDate: utcDate(2026, 7, 1), amountCents: 180_000 });
+  });
+
+  it("defers to the unpaid charge already on the books, whatever its due date", () => {
+    const charges = [charge(180_000, utcDate(2026, 12, 1))];
+    const balance = computeBalance({ charges, payments: [], graceDays: 5, asOf: utcDate(2026, 8, 1) });
+    const next = nextScheduledCharge(lease(), charges, balance);
+    expect(next).toEqual({ dueDate: utcDate(2026, 12, 1), amountCents: 180_000 });
+  });
+
+  it("ignores voided charges when finding the latest billed period", () => {
+    const charges = [
+      charge(180_000, utcDate(2026, 7, 1), utcDate(2026, 7, 2)),
+      charge(180_000, utcDate(2026, 6, 1)),
+    ];
+    const balance = computeBalance({
+      charges,
+      payments: [payment(180_000, "SUCCEEDED")],
+      graceDays: 5,
+    });
+    const next = nextScheduledCharge(lease(), charges, balance);
+    expect(next).toEqual({ dueDate: utcDate(2026, 7, 1), amountCents: 180_000 });
+  });
+
+  it("returns null once projecting past the lease's end date", () => {
+    const charges = [charge(180_000, utcDate(2026, 6, 1))];
+    const balance = computeBalance({
+      charges,
+      payments: [payment(180_000, "SUCCEEDED")],
+      graceDays: 5,
+    });
+    const next = nextScheduledCharge(lease({ endDate: utcDate(2026, 6, 15) }), charges, balance);
+    expect(next).toBeNull();
+  });
+
+  it("returns null for a non-active lease with nothing already owed", () => {
+    expect(nextScheduledCharge(lease({ status: "DRAFT" }), [], emptyBalance)).toBeNull();
+    expect(nextScheduledCharge(lease({ status: "ENDED" }), [], emptyBalance)).toBeNull();
+  });
+
+  it("returns null for a lease with no rent", () => {
+    expect(nextScheduledCharge(lease({ rentAmountCents: 0 }), [], emptyBalance)).toBeNull();
   });
 });
 

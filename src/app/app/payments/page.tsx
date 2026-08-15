@@ -62,16 +62,17 @@ export default async function PaymentsPage() {
 
   const { totals } = summary;
   const today = startOfUtcDay(new Date());
-  const owed = summary.leases.filter((l) => l.balance.balanceCents > 0);
-  // Split what's owed by whether the oldest unpaid charge is due yet — a
-  // balance with no due date in the future can't be "upcoming", so it stays
-  // in Outstanding. Disjoint on purpose: nothing should appear in both tables.
-  const behind = owed.filter(
-    (l) => !l.balance.oldestUnpaidDueDate || l.balance.oldestUnpaidDueDate.getTime() < today.getTime(),
-  );
-  const upcoming = owed
-    .filter((l) => l.balance.oldestUnpaidDueDate && l.balance.oldestUnpaidDueDate.getTime() >= today.getTime())
-    .sort((a, b) => a.balance.oldestUnpaidDueDate!.getTime() - b.balance.oldestUnpaidDueDate!.getTime());
+  // Outstanding balances = already billed and due (or overdue). Upcoming
+  // payments = next rent due in the future — from an unpaid charge that's
+  // billed but not yet due, or (for a lease with nothing charged, e.g. one
+  // whose term hasn't started billing) a projected next period. Split on
+  // nextDue's date so the two tables never list the same lease twice.
+  const dueNow = (l: (typeof summary.leases)[number]) =>
+    !l.nextDue || l.nextDue.dueDate.getTime() < today.getTime();
+  const behind = summary.leases.filter((l) => l.balance.balanceCents > 0 && dueNow(l));
+  const upcoming = summary.leases
+    .filter((l) => l.nextDue && !dueNow(l))
+    .sort((a, b) => a.nextDue!.dueDate.getTime() - b.nextDue!.dueDate.getTime());
   const rate =
     totals.chargedThisMonthCents === 0
       ? null
@@ -256,16 +257,14 @@ export default async function PaymentsPage() {
                   </td>
                   <td className="td">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-slate-500">
-                        {formatDate(lease.balance.oldestUnpaidDueDate)}
-                      </span>
+                      <span className="text-slate-500">{formatDate(lease.nextDue!.dueDate)}</span>
                       <Badge tone="slate">
-                        {relativeDays(daysBetweenUtc(today, lease.balance.oldestUnpaidDueDate!))}
+                        {relativeDays(daysBetweenUtc(today, lease.nextDue!.dueDate))}
                       </Badge>
                     </span>
                   </td>
                   <td className="td text-right font-medium tabular-nums">
-                    {formatCents(lease.balance.balanceCents)}
+                    {formatCents(lease.nextDue!.amountCents)}
                   </td>
                   <td className="td text-right">
                     <Link href={`/app/leases/${lease.leaseId}`} className="link">

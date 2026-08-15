@@ -98,6 +98,41 @@ export function computeBalance({
 }
 
 /**
+ * What a lease owes next — for display, not billing. Unlike `pendingRentCharges`,
+ * this looks *past* the current month, so a lease that hasn't started yet (or is
+ * fully paid through the current period) still shows its next rent date instead
+ * of nothing, which is what a landlord actually means by "upcoming payments".
+ */
+export function nextScheduledCharge(
+  lease: Pick<Lease, "startDate" | "endDate" | "rentAmountCents" | "rentDueDay" | "status">,
+  charges: Pick<Charge, "dueDate" | "voidedAt">[],
+  balance: LeaseBalance,
+): { dueDate: Date; amountCents: number } | null {
+  // An unpaid charge already on the books is what's next owed, whatever its due
+  // date — covers leases that are behind as well as ones due soon.
+  if (balance.oldestUnpaidDueDate) {
+    return { dueDate: balance.oldestUnpaidDueDate, amountCents: balance.balanceCents };
+  }
+  if (lease.status !== "ACTIVE" || lease.rentAmountCents <= 0) return null;
+
+  // Nothing owed right now — project the next period's rent, even though
+  // generateRentCharges won't actually create that Charge row until the period
+  // begins. Same "one charge per calendar month" period math as pendingRentCharges.
+  const live = charges.filter((c) => c.voidedAt === null);
+  const lastBilledPeriod = live.reduce<Date | null>((latest, c) => {
+    const period = startOfUtcMonth(c.dueDate);
+    return !latest || period.getTime() > latest.getTime() ? period : latest;
+  }, null);
+  const nextPeriod = lastBilledPeriod
+    ? addUtcMonths(lastBilledPeriod, 1)
+    : startOfUtcMonth(lease.startDate);
+
+  if (lease.endDate && nextPeriod.getTime() > startOfUtcMonth(lease.endDate).getTime()) return null;
+
+  return { dueDate: rentDueDateFor(nextPeriod, lease.rentDueDay), amountCents: lease.rentAmountCents };
+}
+
+/**
  * A RENT charge writes 6 columns, so 16 rows is 96 bound parameters — just
  * under D1's ceiling of 100. Prisma emits createMany as a single multi-row
  * INSERT, so the row count is what has to stay bounded. See src/lib/chunk.ts.

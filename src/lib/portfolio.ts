@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { computeBalance, type LeaseBalance } from "@/lib/ledger";
+import { computeBalance, nextScheduledCharge, type LeaseBalance } from "@/lib/ledger";
 import { startOfUtcMonth } from "@/lib/dates";
 
 /**
@@ -37,6 +37,8 @@ export type LeaseSummary = {
   unitLabel: string;
   rentAmountCents: number;
   balance: LeaseBalance;
+  /** Next rent owed — from an unpaid charge already billed, or a projected future period. */
+  nextDue: { dueDate: Date; amountCents: number } | null;
 };
 
 export type PortfolioSummary = {
@@ -90,7 +92,10 @@ export async function getPortfolioSummary(args: {
               select: {
                 id: true,
                 status: true,
+                startDate: true,
+                endDate: true,
                 rentAmountCents: true,
+                rentDueDay: true,
                 tenant: { select: { firstName: true, lastName: true, email: true } },
                 charges: {
                   where: { voidedAt: null },
@@ -173,6 +178,7 @@ export async function getPortfolioSummary(args: {
           unitLabel: unit.label,
           rentAmountCents: lease.rentAmountCents,
           balance,
+          nextDue: nextScheduledCharge(lease, lease.charges, balance),
         });
       }
     }
