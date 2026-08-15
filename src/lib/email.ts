@@ -241,6 +241,16 @@ async function sendEmail(input: SendEmailInput): Promise<void> {
   let outcome: SendOutcome;
   if (from && binding) {
     outcome = await sendViaCloudflare(binding, from, input);
+    // The binding object exists as soon as it's declared in wrangler.jsonc —
+    // it doesn't mean the account-level gates (Email Service onboarding, the
+    // Paid plan) are actually satisfied. Those show up as a thrown error at
+    // send time, not as a missing binding, so "binding present" alone isn't
+    // enough to skip Resend. Retry there before giving up, or the escape
+    // hatch above is never actually reachable while Cloudflare is configured
+    // but not yet working.
+    if (outcome.status === "FAILED" && resendKey) {
+      outcome = await sendViaResend(resendKey, from, input);
+    }
   } else if (from && resendKey) {
     outcome = await sendViaResend(resendKey, from, input);
   } else {
