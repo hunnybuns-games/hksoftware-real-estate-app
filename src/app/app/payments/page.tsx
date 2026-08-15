@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";
 import { getPortfolioSummary } from "@/lib/portfolio";
 import { formatCents, formatCentsShort } from "@/lib/money";
-import { formatDate, formatMonth, relativeDays } from "@/lib/dates";
+import { daysBetweenUtc, formatDate, formatMonth, relativeDays, startOfUtcDay } from "@/lib/dates";
 import {
   Badge,
   Banner,
@@ -61,7 +61,17 @@ export default async function PaymentsPage() {
   ]);
 
   const { totals } = summary;
-  const behind = summary.leases.filter((l) => l.balance.balanceCents > 0);
+  const today = startOfUtcDay(new Date());
+  const owed = summary.leases.filter((l) => l.balance.balanceCents > 0);
+  // Split what's owed by whether the oldest unpaid charge is due yet — a
+  // balance with no due date in the future can't be "upcoming", so it stays
+  // in Outstanding. Disjoint on purpose: nothing should appear in both tables.
+  const behind = owed.filter(
+    (l) => !l.balance.oldestUnpaidDueDate || l.balance.oldestUnpaidDueDate.getTime() < today.getTime(),
+  );
+  const upcoming = owed
+    .filter((l) => l.balance.oldestUnpaidDueDate && l.balance.oldestUnpaidDueDate.getTime() >= today.getTime())
+    .sort((a, b) => a.balance.oldestUnpaidDueDate!.getTime() - b.balance.oldestUnpaidDueDate!.getTime());
   const rate =
     totals.chargedThisMonthCents === 0
       ? null
@@ -208,6 +218,54 @@ export default async function PaymentsPage() {
                         <Badge tone="amber">In grace</Badge>
                       ) : null}
                     </span>
+                  </td>
+                  <td className="td text-right">
+                    <Link href={`/app/leases/${lease.leaseId}`} className="link">
+                      Open
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          )}
+        </Card>
+
+        <Card title="Upcoming payments" padded={false}>
+          {upcoming.length === 0 ? (
+            <EmptyState
+              title="Nothing due yet"
+              description="No lease has a charge due in the future right now."
+            />
+          ) : (
+            <Table
+              head={
+                <tr>
+                  <th className="th">Tenant</th>
+                  <th className="th">Unit</th>
+                  <th className="th">Due</th>
+                  <th className="th text-right">Amount</th>
+                  <th className="th"></th>
+                </tr>
+              }
+            >
+              {upcoming.map((lease) => (
+                <tr key={lease.leaseId} className="hover:bg-slate-50/60">
+                  <td className="td font-medium text-slate-900">{lease.tenantName}</td>
+                  <td className="td">
+                    <span className="text-slate-500">{lease.propertyName}</span> · {lease.unitLabel}
+                  </td>
+                  <td className="td">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="text-slate-500">
+                        {formatDate(lease.balance.oldestUnpaidDueDate)}
+                      </span>
+                      <Badge tone="slate">
+                        {relativeDays(daysBetweenUtc(today, lease.balance.oldestUnpaidDueDate!))}
+                      </Badge>
+                    </span>
+                  </td>
+                  <td className="td text-right font-medium tabular-nums">
+                    {formatCents(lease.balance.balanceCents)}
                   </td>
                   <td className="td text-right">
                     <Link href={`/app/leases/${lease.leaseId}`} className="link">
