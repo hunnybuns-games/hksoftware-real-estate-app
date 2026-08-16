@@ -1,0 +1,35 @@
+-- RedefineTables
+PRAGMA defer_foreign_keys=ON;
+PRAGMA foreign_keys=OFF;
+CREATE TABLE "new_Lease" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "organizationId" TEXT NOT NULL,
+    "unitId" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+    "startDate" DATETIME NOT NULL,
+    "endDate" DATETIME,
+    "rentAmountCents" INTEGER NOT NULL,
+    "depositCents" INTEGER NOT NULL DEFAULT 0,
+    "rentDueDay" INTEGER NOT NULL DEFAULT 1,
+    "notes" TEXT,
+    "subsidyOwedCents" INTEGER,
+    "subsidyPayerName" TEXT,
+    "insuranceRequired" BOOLEAN NOT NULL DEFAULT false,
+    "insuranceProvider" TEXT,
+    "insurancePolicyNumber" TEXT,
+    "insuranceExpiresAt" DATETIME,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "Lease_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "Lease_unitId_fkey" FOREIGN KEY ("unitId") REFERENCES "Unit" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "Lease_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+INSERT INTO "new_Lease" ("createdAt", "depositCents", "endDate", "id", "notes", "organizationId", "rentAmountCents", "rentDueDay", "startDate", "status", "subsidyOwedCents", "subsidyPayerName", "tenantId", "unitId", "updatedAt") SELECT "createdAt", "depositCents", "endDate", "id", "notes", "organizationId", "rentAmountCents", "rentDueDay", "startDate", "status", "subsidyOwedCents", "subsidyPayerName", "tenantId", "unitId", "updatedAt" FROM "Lease";
+DROP TABLE "Lease";
+ALTER TABLE "new_Lease" RENAME TO "Lease";
+CREATE INDEX "Lease_organizationId_idx" ON "Lease"("organizationId");
+CREATE INDEX "Lease_unitId_idx" ON "Lease"("unitId");
+CREATE INDEX "Lease_tenantId_idx" ON "Lease"("tenantId");
+PRAGMA foreign_keys=ON;
+PRAGMA defer_foreign_keys=OFF;

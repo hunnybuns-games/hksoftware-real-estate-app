@@ -5,6 +5,7 @@ import { requireStaff } from "@/lib/rbac";
 import { computeBalance } from "@/lib/ledger";
 import { formatCents } from "@/lib/money";
 import { formatDate, daysBetweenUtc, startOfUtcDay } from "@/lib/dates";
+import { insuranceStatus } from "@/lib/insurance";
 import { Badge, Card, EmptyState, LeaseStatusBadge, PageHeader, Table } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Leases" };
@@ -84,6 +85,19 @@ export default async function LeasesPage() {
               const expiringSoon =
                 lease.status === "ACTIVE" && daysToEnd !== null && daysToEnd >= 0 && daysToEnd <= 60;
 
+              // Only surfaced when it needs attention — most leases don't
+              // require renter's insurance at all, and a badge on every row
+              // for "Current" or "Not required" would just be noise. Matches
+              // how the term column's own badge above only appears when a
+              // lease is actually ending soon.
+              const insurance = insuranceStatus({
+                required: lease.insuranceRequired,
+                expiresAt: lease.insuranceExpiresAt,
+                asOf: today,
+              });
+              const insuranceNeedsAttention =
+                lease.status === "ACTIVE" && lease.insuranceRequired && insurance.tone !== "green";
+
               return (
                 <tr key={lease.id} className="hover:bg-slate-50/60">
                   <td className="td">
@@ -93,6 +107,11 @@ export default async function LeasesPage() {
                     >
                       {lease.tenant.firstName} {lease.tenant.lastName}
                     </Link>
+                    {insuranceNeedsAttention ? (
+                      <span className="block">
+                        <Badge tone={insurance.tone}>Insurance: {insurance.label.toLowerCase()}</Badge>
+                      </span>
+                    ) : null}
                   </td>
                   <td className="td">
                     <span className="text-slate-500">{lease.unit.property.name}</span> ·{" "}

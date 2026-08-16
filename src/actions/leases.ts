@@ -305,6 +305,54 @@ async function findOverlappingLease(args: {
   });
 }
 
+const insuranceSchema = z.object({
+  insuranceRequired: z
+    .string()
+    .optional()
+    .transform((v) => v === "on" || v === "true"),
+  insuranceProvider: optionalText(200),
+  insurancePolicyNumber: optionalText(100),
+  insuranceExpiresAt: optionalDateField,
+});
+
+/**
+ * Record-keeping only — see the schema comment on Lease.insuranceRequired.
+ * Kept as its own action/form rather than folded into updateLeaseAction so
+ * editing lease terms and editing insurance status can't accidentally
+ * clobber each other's fields, and so this narrower form doesn't have to
+ * carry the full lease schema's unit/tenant/overlap validation.
+ */
+export async function updateLeaseInsuranceAction(
+  leaseId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const { organizationId } = await assertStaff();
+    const parsed = parseForm(insuranceSchema, formData);
+    if (!parsed.ok) return parsed.state;
+
+    const existing = await db.lease.findFirst({
+      where: { id: leaseId, organizationId },
+      select: { id: true },
+    });
+    if (!existing) return actionError("That lease no longer exists.");
+
+    await db.lease.update({
+      where: { id: existing.id },
+      data: {
+        insuranceRequired: parsed.data.insuranceRequired,
+        insuranceProvider: parsed.data.insuranceProvider ?? null,
+        insurancePolicyNumber: parsed.data.insurancePolicyNumber ?? null,
+        insuranceExpiresAt: parsed.data.insuranceExpiresAt,
+      },
+    });
+
+    revalidateLeaseViews(leaseId);
+    return actionOk("Insurance details saved.");
+  });
+}
+
 function revalidateLeaseViews(leaseId?: string) {
   revalidatePath("/app");
   revalidatePath("/app/leases");

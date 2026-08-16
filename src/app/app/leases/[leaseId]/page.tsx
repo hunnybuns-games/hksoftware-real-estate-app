@@ -5,11 +5,12 @@ import { db } from "@/lib/db";
 import { requireStaff, staffOrganizationIdForMetadata } from "@/lib/rbac";
 import { getLeaseLedger } from "@/lib/ledger";
 import { getLeaseFormOptions } from "@/lib/lease-options";
-import { endLeaseAction, updateLeaseAction } from "@/actions/leases";
+import { endLeaseAction, updateLeaseAction, updateLeaseInsuranceAction } from "@/actions/leases";
 import { addChargeAction, recordManualPaymentAction, voidChargeAction } from "@/actions/payments";
 import { centsToInputValue, formatCents } from "@/lib/money";
 import { formatDate, ordinalDay, relativeDays, toDateInputValue } from "@/lib/dates";
 import { getRentSplit } from "@/lib/rent-split";
+import { insuranceStatus } from "@/lib/insurance";
 import {
   Badge,
   Banner,
@@ -30,6 +31,7 @@ import { LeaseForm } from "../_components/lease-form";
 import { RecordPaymentForm } from "./_components/record-payment-form";
 import { AddChargeForm } from "./_components/add-charge-form";
 import { VoidChargeButton } from "./_components/void-charge-button";
+import { InsuranceForm } from "./_components/insurance-form";
 
 export async function generateMetadata({
   params,
@@ -66,6 +68,11 @@ export default async function LeaseDetailPage({
   const { balance } = lease;
   const rentSplit = getRentSplit(lease);
   const tenantName = `${lease.tenant.firstName} ${lease.tenant.lastName}`;
+  const insurance = insuranceStatus({
+    required: lease.insuranceRequired,
+    expiresAt: lease.insuranceExpiresAt,
+    asOf: new Date(),
+  });
 
   return (
     <div className="space-y-6">
@@ -281,6 +288,23 @@ export default async function LeaseDetailPage({
         </div>
 
         <div className="space-y-6">
+          <Card
+            title="Renter's insurance"
+            actions={
+              <Badge tone={insurance.tone}>{insurance.label}</Badge>
+            }
+          >
+            <InsuranceForm
+              action={updateLeaseInsuranceAction.bind(null, lease.id)}
+              defaults={{
+                insuranceRequired: lease.insuranceRequired,
+                insuranceProvider: lease.insuranceProvider ?? "",
+                insurancePolicyNumber: lease.insurancePolicyNumber ?? "",
+                insuranceExpiresAt: toDateInputValue(lease.insuranceExpiresAt),
+              }}
+            />
+          </Card>
+
           <Card title="Summary">
             <DescriptionList
               items={[

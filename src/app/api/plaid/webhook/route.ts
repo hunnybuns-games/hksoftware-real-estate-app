@@ -23,7 +23,15 @@ type PlaidWebhookPayload = {
 };
 
 export async function POST(req: Request): Promise<Response> {
+  // Logged unconditionally, before verification even runs, specifically so a
+  // Cloudflare log check can tell "Plaid never attempted delivery" apart from
+  // "it arrived and something after this line went wrong" — the two look
+  // identical from a client's point of view (both just mean the connection
+  // never updated), but they point at completely different places to look.
+  console.log("[plaid] webhook POST received");
+
   if (!plaidEnabled()) {
+    console.warn("[plaid] webhook received but Plaid isn't configured — rejecting");
     return Response.json({ error: "Plaid is not configured." }, { status: 503 });
   }
 
@@ -40,6 +48,10 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "Invalid signature." }, { status: 400 });
   }
 
+  console.log(
+    `[plaid] webhook verified: ${payload.webhook_type}/${payload.webhook_code} for item ${payload.item_id ?? "(none)"}`,
+  );
+
   try {
     await handleWebhook(payload);
   } catch (err) {
@@ -54,7 +66,10 @@ export async function POST(req: Request): Promise<Response> {
 }
 
 async function handleWebhook(payload: PlaidWebhookPayload): Promise<void> {
-  if (!payload.item_id) return;
+  if (!payload.item_id) {
+    console.log(`[plaid] webhook ${payload.webhook_type}/${payload.webhook_code} carried no item_id — nothing to do`);
+    return;
+  }
 
   const connection = await db.bankConnection.findUnique({
     where: { plaidItemId: payload.item_id },
@@ -68,7 +83,12 @@ async function handleWebhook(payload: PlaidWebhookPayload): Promise<void> {
   }
 
   if (payload.webhook_type === "TRANSACTIONS" && payload.webhook_code === "SYNC_UPDATES_AVAILABLE") {
-    await syncBankConnection(connection.id);
+    const outcome = await syncBankConnection(connection.id);
+    console.log(
+      `[plaid] webhook-triggered sync for connection ${connection.id}: ` +
+        `${outcome.added} added, ${outcome.modified} modified, ${outcome.removed} removed` +
+        (outcome.hasMore ? " (more pages pending)" : ""),
+    );
     return;
   }
 
@@ -81,5 +101,15 @@ async function handleWebhook(payload: PlaidWebhookPayload): Promise<void> {
       where: { id: connection.id },
       data: { status: "LOGIN_REQUIRED" },
     });
+    console.log(`[plaid] connection ${connection.id} flagged LOGIN_REQUIRED via webhook`);
+    return;
   }
+
+  // Every other webhook_code this app doesn't act on (LOGIN_REPAIRED,
+  // PENDING_DISCONNECT, historical-update codes now superseded by sync,
+  // etc.) — logged rather than silently dropped, so "did we get anything at
+  // all" never has to be answered by guessing.
+  console.log(
+    `[plaid] webhook ${payload.webhook_type}/${payload.webhook_code} for connection ${connection.id} — no handler, ignored`,
+  );
 }

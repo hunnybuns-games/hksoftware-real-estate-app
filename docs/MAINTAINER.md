@@ -103,6 +103,18 @@ derives the tenant's actual owed portion from the total rent and the subsidy amo
 clamping the subsidy so it can never exceed the rent. Most leases leave this null and
 it's a no-op.
 
+A `Lease` also carries **renter's insurance** fields — `insuranceRequired`,
+`insuranceProvider`, `insurancePolicyNumber`, `insuranceExpiresAt` — which are
+record-keeping only, not enforcement. Nothing in this app blocks move-in or gates a
+payment on missing coverage; it's a place to log who's covered and get nudged before a
+policy lapses, matching what a small landlord actually wants day to day. `src/lib/
+insurance.ts`'s `insuranceStatus()` is the pure function behind both surfaces of this:
+the badge on a lease's own detail page (the "Renter's insurance" card, edited via
+`updateLeaseInsuranceAction`), and the same badge appearing inline on the Leases list —
+but only there when it's `insuranceRequired` *and* not currently green (missing,
+expiring within 30 days, or expired), so the list stays quiet for the common case of a
+lease that doesn't require insurance at all.
+
 ## 4. Roles & access control
 
 | Role | Sees | Lands on |
@@ -217,7 +229,11 @@ import row does.
   raw request body — implemented directly against Web Crypto rather than a JWT library.
   `SYNC_UPDATES_AVAILABLE` triggers a sync; `ITEM_LOGIN_REQUIRED` flips the connection to
   needing reconnect (a bank forcing periodic re-auth is normal, expected behavior, not an
-  error state to alarm anyone over).
+  error state to alarm anyone over). The route logs at every stage — receipt (before
+  verification even runs), the verified `webhook_type`/`webhook_code`/item id, the sync
+  outcome counts, and any webhook_code it doesn't act on — specifically so "did Plaid
+  even attempt delivery" is answerable from Cloudflare's logs alone, without needing to
+  reproduce the problem again or cross-reference Plaid's own dashboard.
 
 **Verified against live Sandbox:** this feature was originally built and unit-tested
 (matching/filtering logic, and the webhook's cryptographic verification — both with real,

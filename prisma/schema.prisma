@@ -5,7 +5,7 @@
 // see src/lib/rbac.ts for the guards that enforce it.
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
   // No embedded engine binary/WASM at all — everything goes through a driver
   // adapter (see src/lib/db.ts and prisma/seed.ts: @prisma/adapter-d1 in
   // production, @prisma/adapter-better-sqlite3 locally), so PrismaClient must
@@ -189,8 +189,8 @@ model BankConnection {
   organizationId String       @unique
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  plaidItemId           String @unique
-  accessTokenEncrypted  String
+  plaidItemId          String @unique
+  accessTokenEncrypted String
 
   institutionName String?
   institutionLogo String? // Plaid returns this as a base64 data URI; small enough to inline
@@ -239,7 +239,6 @@ model User {
 
 /**
  * A single-use password reset link.
- *
  * Stores the SHA-256 of the token, never the token itself. The value in the
  * emailed link is the only copy, so a leaked database snapshot can't be turned
  * into account access — which is not true of Invitation.token above, and is the
@@ -250,11 +249,13 @@ model PasswordResetToken {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  /** SHA-256 hex of the token. Unique so a lookup is a single indexed read. */
-  tokenHash String   @unique
+  /**
+   * SHA-256 hex of the token. Unique so a lookup is a single indexed read.
+   */
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
@@ -389,6 +390,17 @@ model Lease {
   // never drift out of sync after a rent change. See src/lib/rent-split.ts.
   subsidyOwedCents Int?
   subsidyPayerName String? // e.g. "Springfield Housing Authority" — free text
+
+  // Renter's insurance — tracked, not enforced. Nothing in this app blocks
+  // move-in or charges a fee for missing coverage; this is a record-keeping
+  // and reminder surface only, matching what a small landlord actually wants
+  // (know who's covered, get nudged before a policy lapses), not a compliance
+  // gate. insuranceRequired is a per-lease toggle because not every landlord
+  // requires it and not every unit type needs it (e.g. an owner-occupied duplex).
+  insuranceRequired     Boolean   @default(false)
+  insuranceProvider     String?
+  insurancePolicyNumber String?
+  insuranceExpiresAt    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
