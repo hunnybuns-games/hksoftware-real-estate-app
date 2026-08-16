@@ -228,6 +228,15 @@ export default async function PropertyDetailPage({
                         </Link>
                       )}
                       <Link
+                        href={`/apply/${unit.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="link mr-3"
+                        title="Public application link — share this with prospects"
+                      >
+                        Apply link
+                      </Link>
+                      <Link
                         href={`/app/properties/${property.id}/units/${unit.id}`}
                         className="link"
                       >

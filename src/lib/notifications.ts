@@ -194,3 +194,54 @@ ${appUrl(`/invite/${args.token}`)}
 This link expires in 7 days.`,
   });
 }
+
+export function notifyApplicationReceived(args: {
+  to: Recipient;
+  organizationId: string;
+  applicationId: string;
+  applicantName: string;
+  unitLabel: string;
+  propertyName: string;
+}) {
+  return sendEmailSafely({
+    to: args.to.email,
+    type: "APPLICATION_RECEIVED",
+    organizationId: args.organizationId,
+    subject: `New rental application: ${args.applicantName}`,
+    body: `${args.applicantName} applied for ${args.propertyName} — ${args.unitLabel}.
+
+Review it here: ${appUrl(`/app/applications/${args.applicationId}`)}`,
+  });
+}
+
+/**
+ * Sent to the applicant, not a signed-in user — there's no account behind this
+ * address, so unlike every other notify* here this is never deduped or tied to
+ * a recipient who could look the message up again later. Only sent for the two
+ * decisions an applicant is actually waiting on; UNDER_REVIEW and WITHDRAWN
+ * don't get an email.
+ */
+export function notifyApplicationDecided(args: {
+  to: Recipient;
+  organizationId: string;
+  orgName: string;
+  approved: boolean;
+  propertyName: string;
+  unitLabel: string;
+}) {
+  return sendEmailSafely({
+    to: args.to.email,
+    type: "APPLICATION_DECIDED",
+    organizationId: args.organizationId,
+    subject: args.approved
+      ? `Your application for ${args.propertyName} — ${args.unitLabel} was approved`
+      : `Update on your application for ${args.propertyName} — ${args.unitLabel}`,
+    body: args.approved
+      ? `Hi ${args.to.name},
+
+Good news — your application for ${args.propertyName} — ${args.unitLabel} has been approved. ${args.orgName} will be in touch about next steps.`
+      : `Hi ${args.to.name},
+
+Thanks for applying for ${args.propertyName} — ${args.unitLabel}. ${args.orgName} has decided to go in a different direction for this unit. We appreciate your interest.`,
+  });
+}

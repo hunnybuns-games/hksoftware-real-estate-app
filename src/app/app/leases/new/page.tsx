@@ -4,7 +4,7 @@ import { requireStaff } from "@/lib/rbac";
 import { createLeaseAction } from "@/actions/leases";
 import { getLeaseFormOptions } from "@/lib/lease-options";
 import { toDateInputValue, startOfUtcMonth, addUtcMonths } from "@/lib/dates";
-import { Breadcrumbs, Card, EmptyState, PageHeader } from "@/components/ui";
+import { Banner, Breadcrumbs, Card, EmptyState, PageHeader } from "@/components/ui";
 import { LeaseForm } from "../_components/lease-form";
 
 export const metadata: Metadata = { title: "New lease" };
@@ -12,10 +12,10 @@ export const metadata: Metadata = { title: "New lease" };
 export default async function NewLeasePage({
   searchParams,
 }: {
-  searchParams: Promise<{ unitId?: string; tenantId?: string }>;
+  searchParams: Promise<{ unitId?: string; tenantId?: string; applicationId?: string }>;
 }) {
   const ctx = await requireStaff();
-  const [{ units, tenants }, { unitId, tenantId }] = await Promise.all([
+  const [{ units, tenants }, { unitId, tenantId, applicationId }] = await Promise.all([
     getLeaseFormOptions(ctx.organizationId),
     searchParams,
   ]);
@@ -64,11 +64,20 @@ export default async function NewLeasePage({
         title="New lease"
         subtitle="Creating an active lease marks the unit occupied and starts billing rent."
       />
+      {applicationId ? (
+        <div className="mb-6">
+          <Banner tone="info" title="Creating this lease from an approved application">
+            Unit and tenant are filled in from the application. Everything else — dates, rent,
+            deposit — is still yours to set.
+          </Banner>
+        </div>
+      ) : null}
       <Card>
         <LeaseForm
           action={createLeaseAction}
           units={units}
           tenants={tenants}
+          hiddenFields={applicationId ? { applicationId } : undefined}
           defaults={{
             unitId: selectedUnit?.id ?? "",
             tenantId: tenantId ?? "",

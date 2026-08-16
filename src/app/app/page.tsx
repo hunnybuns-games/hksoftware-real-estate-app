@@ -25,7 +25,7 @@ export default async function DashboardPage({
   const ctx = await requireStaff();
   const { welcome } = await searchParams;
 
-  const [summary, org, recentPayments, unmatchedCount] = await Promise.all([
+  const [summary, org, recentPayments, unmatchedCount, pendingApplications] = await Promise.all([
     getPortfolioSummary({ organizationId: ctx.organizationId }),
     db.organization.findUnique({
       where: { id: ctx.organizationId },
@@ -57,6 +57,9 @@ export default async function DashboardPage({
     }),
     db.payment.count({
       where: { organizationId: ctx.organizationId, reconciliationStatus: "UNMATCHED" },
+    }),
+    db.application.count({
+      where: { organizationId: ctx.organizationId, status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
     }),
   ]);
 
@@ -159,7 +162,7 @@ export default async function DashboardPage({
           </Banner>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatTile
             label="Collected this month"
             value={formatCentsShort(totals.collectedThisMonthCents)}
@@ -184,6 +187,12 @@ export default async function DashboardPage({
             label="Occupancy"
             value={`${Math.round(totals.occupancyRate * 100)}%`}
             hint={`${totals.vacantCount} vacant of ${totals.unitCount}`}
+          />
+          <StatTile
+            label="Applications"
+            value={String(pendingApplications)}
+            hint={pendingApplications === 0 ? "Nothing waiting on review" : "Waiting on review"}
+            tone={pendingApplications > 0 ? "warning" : "default"}
           />
           <StatTile
             label="Open maintenance"

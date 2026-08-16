@@ -82,6 +82,14 @@
       "name": "PASSWORD_RESET_RATE_LIMIT",
       "namespace_id": "1003",
       "simple": { "limit": 3, "period": 60 }
+    },
+    {
+      // The rental-application form at /apply/[unitId] needs no login, so it's
+      // the one public write endpoint besides signup/login/reset — same reason
+      // for a limit, keyed by IP only (see src/lib/rate-limit.ts).
+      "name": "APPLICATION_RATE_LIMIT",
+      "namespace_id": "1004",
+      "simple": { "limit": 5, "period": 60 }
     }
   ],
   /**

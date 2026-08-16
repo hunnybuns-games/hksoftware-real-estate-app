@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireStaff();
 
-  const [org, openRequests] = await Promise.all([
+  const [org, openRequests, pendingApplications] = await Promise.all([
     db.organization.findUnique({
       where: { id: ctx.organizationId },
       select: { name: true },
@@ -36,12 +36,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     db.maintenanceRequest.count({
       where: { organizationId: ctx.organizationId, status: { not: "RESOLVED" } },
     }),
+    db.application.count({
+      where: { organizationId: ctx.organizationId, status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
+    }),
   ]);
 
   const nav: NavItem[] = [
     { href: "/app", label: "Dashboard", exact: true },
     { href: "/app/properties", label: "Properties" },
     { href: "/app/tenants", label: "Tenants" },
+    { href: "/app/applications", label: "Applications", badge: pendingApplications },
     { href: "/app/leases", label: "Leases" },
     { href: "/app/payments", label: "Rent" },
     { href: "/app/reports", label: "Reports" },

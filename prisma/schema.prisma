@@ -132,6 +132,16 @@ enum NotificationType {
   STAFF_INVITE
   TENANT_INVITE
   PASSWORD_RESET
+  APPLICATION_RECEIVED
+  APPLICATION_DECIDED
+}
+
+enum ApplicationStatus {
+  SUBMITTED // just came in, nobody's looked at it yet
+  UNDER_REVIEW // staff has opened it and is actively working it
+  APPROVED
+  DENIED
+  WITHDRAWN // applicant pulled out, or staff closed it as no longer relevant
 }
 
 enum NotificationStatus {
@@ -170,6 +180,7 @@ model Organization {
   importBatches       PaymentImportBatch[]
   expenses            Expense[]
   bankConnection      BankConnection?
+  applications        Application[]
 }
 
 /**
@@ -227,12 +238,13 @@ model User {
   updatedAt      DateTime      @updatedAt
   lastLoginAt    DateTime?
 
-  tenant           Tenant?
-  ownedProperties  PropertyOwner[]
-  maintenanceNotes MaintenanceNote[]
-  requestsCreated  MaintenanceRequest[] @relation("MaintenanceRequestCreatedBy")
-  importBatches    PaymentImportBatch[]
-  passwordResets   PasswordResetToken[]
+  tenant               Tenant?
+  ownedProperties      PropertyOwner[]
+  maintenanceNotes     MaintenanceNote[]
+  requestsCreated      MaintenanceRequest[] @relation("MaintenanceRequestCreatedBy")
+  importBatches        PaymentImportBatch[]
+  passwordResets       PasswordResetToken[]
+  applicationsReviewed Application[]
 
   @@index([organizationId])
 }
@@ -334,6 +346,7 @@ model Unit {
 
   leases              Lease[]
   maintenanceRequests MaintenanceRequest[]
+  applications        Application[]
 
   @@unique([propertyId, label])
   @@index([propertyId])
@@ -408,6 +421,9 @@ model Lease {
   charges             Charge[]
   payments            Payment[]
   maintenanceRequests MaintenanceRequest[]
+  // Set on the Application this lease was created from, when it was created
+  // that way — see Application.leaseId below.
+  application         Application?
 
   @@index([organizationId])
   @@index([unitId])
@@ -581,6 +597,61 @@ model MaintenanceNote {
   createdAt DateTime           @default(now())
 
   @@index([requestId])
+}
+
+// ---------------------------------------------------------------------------
+// Rental applications
+//
+// A prospect applies against a specific unit via a public, unauthenticated
+// link (/apply/[unitId] — the unit's cuid doubles as the unlisted-but-shareable
+// token, the same trust model an Innago-style "listing link" uses). Staff then
+// reviews it from inside the app and, if approved, converts it into a lease.
+// There is deliberately no separate "Prospect" or account for the applicant —
+// this is a single-shot record, not a portal login.
+// ---------------------------------------------------------------------------
+
+model Application {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String
+  unit           Unit         @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  firstName String
+  lastName  String
+  email     String
+  phone     String?
+
+  desiredMoveInDate  DateTime?
+  occupants          Int?
+  // What the applicant told us they make a month — a self-reported figure for
+  // staff to weigh, never verified by this app. See src/lib/applications.ts
+  // for the income-guideline calculation this feeds.
+  monthlyIncomeCents Int?
+  hasPets            Boolean   @default(false)
+  petDetails         String?
+  message            String?
+
+  status ApplicationStatus @default(SUBMITTED)
+
+  // Staff-only; never shown to the applicant.
+  reviewNotes  String?
+  reviewedById String?
+  reviewedBy   User?     @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+
+  // Set once staff creates a lease from this application (see
+  // convertApplicationToLeaseAction), so the audit trail shows what an
+  // approved application actually turned into. Unique because a lease can only
+  // ever have come from one application.
+  leaseId String? @unique
+  lease   Lease?  @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([unitId])
 }
 
 // ---------------------------------------------------------------------------

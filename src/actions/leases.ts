@@ -87,6 +87,11 @@ export async function createLeaseAction(
     const parsed = parseForm(leaseSchema, formData);
     if (!parsed.ok) return parsed.state;
     const data = parsed.data;
+    // Not part of leaseSchema (it's zod's default "strip unknown keys"
+    // behavior on plain z.object, so this doesn't need its own field) — only
+    // present when the new-lease form was reached via "Convert to lease" on
+    // an approved application. See convertApplicationToLeaseAction.
+    const applicationId = String(formData.get("applicationId") ?? "").trim() || null;
 
     // Both sides of the relationship must belong to the caller's org.
     const [unit, tenant] = await Promise.all([
@@ -131,6 +136,18 @@ export async function createLeaseAction(
     if (data.status === "ACTIVE") {
       await generateRentCharges({ organizationId });
       await applyReconciliation(lease.id);
+    }
+
+    // Link back to the application this lease came from, if any. Scoped by
+    // org and only when the application doesn't already have a lease, so a
+    // tampered hidden field can't reassign someone else's application.
+    if (applicationId) {
+      await db.application.updateMany({
+        where: { id: applicationId, organizationId, leaseId: null },
+        data: { leaseId: lease.id },
+      });
+      revalidatePath("/app/applications");
+      revalidatePath(`/app/applications/${applicationId}`);
     }
 
     newId = lease.id;

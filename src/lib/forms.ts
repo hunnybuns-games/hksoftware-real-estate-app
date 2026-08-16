@@ -111,6 +111,21 @@ export const centsField = (label = "Amount") =>
     })
     .transform((v) => Math.round(Number(v.replace(/[$,\s]/g, "")) * 100));
 
+/** Dollar-amount text input -> cents, or null when left blank. */
+export const optionalCentsField = (label = "Amount") =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ?? "").trim())
+    .refine(
+      (v) =>
+        v === "" ||
+        /^\$?\s*\d{1,9}(,\d{3})*(\.\d{1,2})?$|^\$?\s*\d+(\.\d{1,2})?$/.test(v),
+      { message: `Enter ${label.toLowerCase()} as a dollar amount, e.g. 1850 or 1850.00.` },
+    )
+    .transform((v) => (v === "" ? null : Math.round(Number(v.replace(/[$,\s]/g, "")) * 100)));
+
 export const dateField = (label = "Date") =>
   z
     .string()
@@ -132,3 +147,17 @@ export const intField = (label: string, min: number, max: number) =>
     .int(`${label} must be a whole number.`)
     .min(min, `${label} must be at least ${min}.`)
     .max(max, `${label} can be at most ${max}.`);
+
+/** Whole-number text input -> number, or null when left blank. */
+export const optionalIntField = (label: string, min: number, max: number) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ?? "").trim())
+    .refine((v) => v === "" || /^\d+$/.test(v), `${label} must be a whole number.`)
+    .transform((v) => (v === "" ? null : Number(v)))
+    .refine(
+      (v) => v === null || (v >= min && v <= max),
+      `${label} must be between ${min} and ${max}.`,
+    );

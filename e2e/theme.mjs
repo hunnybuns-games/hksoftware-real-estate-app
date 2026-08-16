@@ -235,6 +235,7 @@ const surfaces = [
   ["new property form", "/app/properties/new"],
   ["leases", "/app/leases"],
   ["tenants", "/app/tenants"],
+  ["applications", "/app/applications"],
   ["payments", "/app/payments"],
   ["payment import", "/app/payments/import"],
   ["maintenance", "/app/maintenance"],
@@ -274,11 +275,26 @@ for (const [name, path] of surfaces) {
 // Signed-out pages first: no setup, and the sign-in page is the one a dark-mode
 // user meets before anything else.
 const anon = await (await browser.newContext({ colorScheme: "dark" })).newPage();
-for (const [name, path] of [
+const anonPages = [
   ["landing page", "/"],
   ["sign-in page", "/login"],
   ["sign-up page", "/signup"],
-]) {
+];
+
+// The public application form needs a real unit id — same trick e2e/mvp.mjs
+// and e2e/applications.mjs use to reach into the seeded database directly.
+{
+  const path = await import("node:path");
+  const { PrismaClient } = await import("@prisma/client");
+  const { PrismaBetterSQLite3 } = await import("@prisma/adapter-better-sqlite3");
+  const dbUrl = `file:${path.default.join(process.cwd(), "prisma", "dev.db")}`;
+  const db = new PrismaClient({ adapter: new PrismaBetterSQLite3({ url: dbUrl }) });
+  const unit = await db.unit.findFirst({ select: { id: true } });
+  await db.$disconnect();
+  if (unit) anonPages.push(["apply page", `/apply/${unit.id}`]);
+}
+
+for (const [name, path] of anonPages) {
   if (!(await auditSurface(anon, name, path))) auditFailures++;
 }
 

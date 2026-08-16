@@ -16,7 +16,11 @@ import { headers } from "next/headers";
  * where this app was before this file existed.
  */
 
-type LimiterName = "LOGIN_RATE_LIMIT" | "SIGNUP_RATE_LIMIT" | "PASSWORD_RESET_RATE_LIMIT";
+type LimiterName =
+  | "LOGIN_RATE_LIMIT"
+  | "SIGNUP_RATE_LIMIT"
+  | "PASSWORD_RESET_RATE_LIMIT"
+  | "APPLICATION_RATE_LIMIT";
 
 /**
  * The limiter binding, or null when there isn't one — local `next dev` has no
@@ -104,4 +108,14 @@ export async function passwordResetAttemptAllowed(email: string): Promise<boolea
     ip ? `reset:ip:${ip}` : null,
     `reset:email:${email.trim().toLowerCase()}`,
   ]);
+}
+
+/**
+ * Rental application submissions. Keyed by IP only — unlike login/reset there's
+ * no existing account behind an applicant's email to protect, and a real
+ * applicant filling out one unit's form isn't going to trip a 5/minute budget.
+ */
+export async function applicationAttemptAllowed(): Promise<boolean> {
+  const ip = await clientIp();
+  return allowed("APPLICATION_RATE_LIMIT", [ip ? `application:ip:${ip}` : null]);
 }

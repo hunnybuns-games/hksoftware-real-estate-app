@@ -45,6 +45,7 @@ export function LeaseForm({
   defaults,
   submitLabel,
   cancelHref,
+  hiddenFields,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   units: UnitOption[];
@@ -52,6 +53,8 @@ export function LeaseForm({
   defaults: LeaseFormValues;
   submitLabel: string;
   cancelHref: string;
+  /** Extra fields the action reads directly off formData, e.g. applicationId. */
+  hiddenFields?: Record<string, string>;
 }) {
   const [hasSubsidy, setHasSubsidy] = useState(defaults.subsidyOwedCents !== "");
 
@@ -59,6 +62,10 @@ export function LeaseForm({
     <ActionForm action={action} successMessage>
       {(state) => (
         <>
+          {Object.entries(hiddenFields ?? {}).map(([name, value]) => (
+            <input key={name} type="hidden" name={name} value={value} />
+          ))}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="Unit"
