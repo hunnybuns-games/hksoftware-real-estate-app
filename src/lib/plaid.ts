@@ -1,4 +1,11 @@
-import { Configuration, CountryCode, PlaidApi, PlaidEnvironments, Products } from "plaid";
+import {
+  Configuration,
+  CountryCode,
+  PlaidApi,
+  PlaidEnvironments,
+  Products,
+  SandboxItemFireWebhookRequestWebhookCodeEnum,
+} from "plaid";
 import type { Transaction as PlaidRawTransaction } from "plaid";
 import axios from "axios";
 
@@ -44,6 +51,19 @@ function credentials(): { clientId: string; secret: string; env: "sandbox" | "pr
 
 export function plaidEnabled(): boolean {
   return credentials() !== null;
+}
+
+/**
+ * Gates the "Sandbox tools" panel in Settings (see the simulateDepositAction,
+ * fireSyncWebhookAction and forceReauthAction actions in bank-connection.ts).
+ * Sandbox generates no organic transaction activity and there's no UI path
+ * to Plaid's own webhook or re-auth flows, so those actions call Plaid's
+ * test-simulation endpoints directly — which themselves reject non-Sandbox
+ * credentials, but checking here first means the failure is our own clear
+ * message rather than an opaque Plaid error.
+ */
+export function plaidSandboxMode(): boolean {
+  return credentials()?.env === "sandbox";
 }
 
 let client: PlaidApi | null = null;
@@ -181,4 +201,57 @@ export async function syncTransactions(args: {
     nextCursor: response.data.next_cursor,
     hasMore: response.data.has_more,
   };
+}
+
+// --- Sandbox-only test tooling ----------------------------------------------
+//
+// Everything below drives Plaid's own `/sandbox/*` simulation endpoints, which
+// 400 outside Sandbox. Callers (src/actions/bank-connection.ts) check
+// plaidSandboxMode() first so that's never actually hit in production.
+
+/**
+ * Injects a fake transaction into the connected Item's history. Sandbox test
+ * banks don't produce new activity on their own, so this is what stands in
+ * for "a rent check gets deposited" while testing the sync path.
+ */
+export async function simulateDeposit(args: {
+  accessToken: string;
+  amountCents: number;
+  description: string;
+}): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  await getPlaid().sandboxTransactionsCreate({
+    access_token: args.accessToken,
+    transactions: [
+      {
+        date_transacted: today,
+        date_posted: today,
+        // Plaid's sign convention is inverted from ours here too — see the
+        // note on PlaidTransaction above. Negative means money IN.
+        amount: -(args.amountCents / 100),
+        description: args.description,
+      },
+    ],
+  });
+}
+
+/**
+ * Makes Plaid deliver a real, ES256-signed SYNC_UPDATES_AVAILABLE webhook to
+ * our own /api/plaid/webhook route — exercises signature verification and
+ * the sync job together, not just syncBankConnection() in isolation.
+ */
+export async function fireSyncWebhook(accessToken: string): Promise<void> {
+  await getPlaid().sandboxItemFireWebhook({
+    access_token: accessToken,
+    webhook_code: SandboxItemFireWebhookRequestWebhookCodeEnum.SyncUpdatesAvailable,
+  });
+}
+
+/**
+ * Flips the Item into ITEM_LOGIN_REQUIRED, the same state a bank forcing
+ * periodic re-auth produces — for testing the "needs reconnecting" banner
+ * and the reconnect-via-Link recovery path.
+ */
+export async function resetItemLogin(accessToken: string): Promise<void> {
+  await getPlaid().sandboxItemResetLogin({ access_token: accessToken });
 }

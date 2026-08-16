@@ -219,14 +219,23 @@ import row does.
   needing reconnect (a bank forcing periodic re-auth is normal, expected behavior, not an
   error state to alarm anyone over).
 
-**A gap worth knowing about:** this feature was built and unit-tested (matching/filtering
-logic, and the webhook's cryptographic verification — both with real, non-mocked
-crypto/logic, just no live network) without ever completing a live connect-and-sync
-against Plaid's actual Sandbox — the build session's sandbox blocked outbound access to
-Plaid's API and CDN hosts entirely. Everything that could be verified without a live
-Plaid connection was; the actual "click Connect, log into Plaid's fake Sandbox bank, see
-a transaction land on the Rent page" walkthrough still needs to happen once, by a human,
-somewhere with real internet access, before trusting this in production.
+**Verified against live Sandbox:** this feature was originally built and unit-tested
+(matching/filtering logic, and the webhook's cryptographic verification — both with real,
+non-mocked crypto/logic) without ever completing a live connect-and-sync, because the
+build session's network policy blocked outbound access to Plaid's API and CDN hosts
+entirely. That gap has since been closed by hand against production comfylease.com: Link
+opens, connects a Sandbox test bank, and the connection reaches "Connected" in Settings.
+Production (real institutions, not Sandbox test banks) is still unverified.
+
+**Settings → Rent collection → "Sandbox tools"** (rendered only when `plaidSandboxMode()`
+— i.e. never on a deployment pointed at production Plaid) exists because Sandbox produces
+no organic transaction activity and there's no other UI path to Plaid's webhook or
+re-auth flows. Three buttons, backed by `simulateDepositAction` / `fireSyncWebhookAction` /
+`forceReauthAction` in `bank-connection.ts`, which call Plaid's own `sandbox/*`
+simulation endpoints (`simulateDeposit` / `fireSyncWebhook` / `resetItemLogin` in
+`plaid.ts`) from the Worker rather than requiring anyone to script curl against Plaid by
+hand: inject a fake transaction, fire a real signed `SYNC_UPDATES_AVAILABLE` webhook at
+our own route, or force `ITEM_LOGIN_REQUIRED` to test the reconnect flow.
 
 ## 6. The reconciliation engine
 
@@ -629,11 +638,12 @@ layout's `generateMetadata()` is a function for the same reason.
   `npm run cf:migrate` (§14). Never rehearse a restore against the real database; use a
   throwaway one. Recovering by pasting SQL has its own cost, since it leaves the migration
   ledger empty — see "If the ledger and the schema disagree" in §14.
-- **The Plaid bank feed (§5) has never completed a live Sandbox connect-and-sync.** It was
-  built and unit-tested with real logic/crypto but no live network access to Plaid at all
-  (the build session's network policy blocked Plaid's API and CDN hosts outright). Do the
-  actual Link-connect-sync walkthrough by hand once, somewhere with real internet access,
-  before trusting this with anyone's real bank account.
+- **The Plaid bank feed (§5) has now completed a live Sandbox connect-and-sync**, by hand,
+  against production comfylease.com — Link opens, the phone-verification step Plaid's
+  widget shows in Sandbox is expected and clears on its own, and a connected Item reaches
+  "Connected" in Settings. It still hasn't been exercised against a *real* institution —
+  only Sandbox test banks so far — so treat production Plaid access as unverified until
+  that happens too.
 - **Rate limiting fails open.** Login, signup and password reset go through the Workers
   `ratelimit` bindings in `wrangler.jsonc` (`src/lib/rate-limit.ts`), but if the limiter
   throws or the binding is absent the request is allowed. That's deliberate — a limiter

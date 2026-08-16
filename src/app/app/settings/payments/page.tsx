@@ -5,10 +5,11 @@ import { requireStaff } from "@/lib/rbac";
 import { refreshStripeStatusAction, startStripeOnboardingAction } from "@/actions/org";
 import { disconnectBankAction, syncBankNowAction } from "@/actions/bank-connection";
 import { stripeEnabled } from "@/lib/stripe";
-import { plaidEnabled } from "@/lib/plaid";
+import { plaidEnabled, plaidSandboxMode } from "@/lib/plaid";
 import { Badge, Banner, Card, DescriptionList } from "@/components/ui";
 import { ActionButton } from "@/components/action-button";
 import { BankConnectButton } from "./_components/bank-connect-button";
+import { SandboxTools } from "./_components/sandbox-tools";
 
 export const metadata: Metadata = { title: "Rent collection" };
 
@@ -224,6 +225,12 @@ export default async function PaymentSettingsPage({
           )}
         </div>
       </Card>
+
+      {plaidSandboxMode() && isAdmin ? (
+        <Card title="Sandbox tools">
+          <SandboxTools />
+        </Card>
+      ) : null}
 
       {ready ? null : (
         <Card title="Meanwhile">

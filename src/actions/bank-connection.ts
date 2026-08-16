@@ -1,15 +1,20 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { assertAdmin, AuthorizationError } from "@/lib/rbac";
-import { type ActionState, actionError, actionOk, runAction } from "@/lib/forms";
+import { type ActionState, actionError, actionOk, centsField, parseForm, runAction } from "@/lib/forms";
 import {
   createLinkToken,
   exchangePublicToken,
+  fireSyncWebhook,
   getInstitutionInfo,
   plaidEnabled,
+  plaidSandboxMode,
   removeItem,
+  resetItemLogin,
+  simulateDeposit,
 } from "@/lib/plaid";
 import { decryptToken, encryptToken } from "@/lib/token-encryption";
 import { syncBankConnection } from "@/lib/plaid-sync";
@@ -166,5 +171,89 @@ export async function disconnectBankAction(_prev: ActionState): Promise<ActionSt
     await db.bankConnection.delete({ where: { id: connection.id } });
     revalidatePath("/app/settings/payments");
     return actionOk("Bank account disconnected.");
+  });
+}
+
+/**
+ * Everything below backs the "Sandbox tools" panel (Settings → Rent
+ * collection, rendered only when plaidSandboxMode()). Sandbox never produces
+ * transaction activity on its own and there's no other UI path to Plaid's
+ * webhook or re-auth flows, so these call Plaid's own test-simulation
+ * endpoints from here — the Worker has real internet access to Plaid even
+ * where a local dev sandbox might not.
+ */
+
+const simulateDepositSchema = z.object({
+  amountCents: centsField("Amount"),
+  description: z
+    .string()
+    .trim()
+    .min(1, "Enter a description.")
+    .max(140, "Keep it under 140 characters."),
+});
+
+/** Puts a fake deposit in front of the connected Item — Sync now (or fireSyncWebhookAction below) picks it up from there. */
+export async function simulateDepositAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const ctx = await assertAdmin();
+    if (!plaidSandboxMode()) return actionError("Sandbox tools only work in Plaid's Sandbox environment.");
+
+    const parsed = parseForm(simulateDepositSchema, formData);
+    if (!parsed.ok) return parsed.state;
+
+    const connection = await db.bankConnection.findUnique({
+      where: { organizationId: ctx.organizationId },
+      select: { accessTokenEncrypted: true },
+    });
+    if (!connection) return actionError("Connect a bank account first.");
+
+    const accessToken = await decryptToken(connection.accessTokenEncrypted);
+    await simulateDeposit({
+      accessToken,
+      amountCents: parsed.data.amountCents,
+      description: parsed.data.description,
+    });
+
+    return actionOk('Injected. Click "Sync now" above, or "Fire sync webhook" below, to pull it in.');
+  });
+}
+
+/** Fires a real, Plaid-signed SYNC_UPDATES_AVAILABLE webhook at our own /api/plaid/webhook route. */
+export async function fireSyncWebhookAction(_prev: ActionState): Promise<ActionState> {
+  return runAction(async () => {
+    const ctx = await assertAdmin();
+    if (!plaidSandboxMode()) return actionError("Sandbox tools only work in Plaid's Sandbox environment.");
+
+    const connection = await db.bankConnection.findUnique({
+      where: { organizationId: ctx.organizationId },
+      select: { accessTokenEncrypted: true },
+    });
+    if (!connection) return actionError("Connect a bank account first.");
+
+    const accessToken = await decryptToken(connection.accessTokenEncrypted);
+    await fireSyncWebhook(accessToken);
+
+    return actionOk("Webhook fired — it should hit /api/plaid/webhook within a few seconds.");
+  });
+}
+
+/** Flips the connection into ITEM_LOGIN_REQUIRED, same as a bank forcing periodic re-auth. */
+export async function forceReauthAction(_prev: ActionState): Promise<ActionState> {
+  return runAction(async () => {
+    const ctx = await assertAdmin();
+    if (!plaidSandboxMode()) return actionError("Sandbox tools only work in Plaid's Sandbox environment.");
+
+    const connection = await db.bankConnection.findUnique({
+      where: { organizationId: ctx.organizationId },
+      select: { accessTokenEncrypted: true },
+    });
+    if (!connection) return actionError("Connect a bank account first.");
+
+    const accessToken = await decryptToken(connection.accessTokenEncrypted);
+    await resetItemLogin(accessToken);
+
+    return actionOk(
+      "Login reset. Plaid should send us the ITEM_LOGIN_REQUIRED webhook shortly — reload in a few seconds, or click Sync now to detect it immediately.",
+    );
   });
 }
