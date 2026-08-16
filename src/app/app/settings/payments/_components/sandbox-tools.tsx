@@ -21,6 +21,14 @@ export function SandboxTools() {
           transaction into the connected Item — put a tenant&apos;s name or unit label in the
           description to test lease matching.
         </p>
+        <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
+          Only works for Items connected with Plaid&apos;s{" "}
+          <code className="rounded bg-white/60 px-1 dark:bg-white/10">user_transactions_dynamic</code>{" "}
+          test username (any non-blank password) at First Platypus Bank — it silently does
+          nothing for <code className="rounded bg-white/60 px-1 dark:bg-white/10">user_good</code>.
+          Use &quot;Connect a different bank&quot; above to reconnect with that username if this
+          doesn&apos;t seem to be doing anything.
+        </p>
         <ActionForm action={simulateDepositAction} successMessage className="mt-3">
           {(state) => (
             <>

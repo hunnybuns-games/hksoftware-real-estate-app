@@ -237,6 +237,17 @@ simulation endpoints (`simulateDeposit` / `fireSyncWebhook` / `resetItemLogin` i
 hand: inject a fake transaction, fire a real signed `SYNC_UPDATES_AVAILABLE` webhook at
 our own route, or force `ITEM_LOGIN_REQUIRED` to test the reconnect flow.
 
+**`simulateDeposit` only works against an Item connected with Plaid's
+`user_transactions_dynamic` test username** (any non-blank password, First Platypus Bank,
+non-OAuth) — it's a no-op against the ordinary `user_good` test user everyone reaches for
+first. `/sandbox/transactions/create` is scoped to that one special test user; against
+`user_good` the call reports success but the transaction has nowhere to attach, so
+nothing shows up on the next sync. `user_transactions_dynamic` also comes pre-seeded with
+~50 transactions across a checking and a credit-card account, so it's the better test
+Item to connect with to begin with. The UI panel says this too; noting it here since it's
+the kind of thing worth knowing before spending twenty minutes wondering why the button
+appears to do nothing.
+
 ## 6. The reconciliation engine
 
 This is the actual differentiator, and the thing most worth understanding before
