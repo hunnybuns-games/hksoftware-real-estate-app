@@ -48,7 +48,7 @@ export async function startRentPaymentAction(
     if (!lease) return actionError("We couldn't find that lease on your account.");
 
     const org = lease.organization;
-    if (!stripeEnabled || !org.stripeAccountId || !org.stripeChargesEnabled) {
+    if (!stripeEnabled() || !org.stripeAccountId || !org.stripeChargesEnabled) {
       return actionError(
         `${org.name} hasn't finished setting up online payments yet. Please reach out to them to arrange payment.`,
       );

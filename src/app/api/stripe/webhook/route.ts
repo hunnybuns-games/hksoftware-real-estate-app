@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<Response> {
-  if (!stripeEnabled) {
+  if (!stripeEnabled()) {
     return Response.json({ error: "Stripe is not configured." }, { status: 503 });
   }
 

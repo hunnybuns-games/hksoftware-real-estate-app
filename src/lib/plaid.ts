@@ -24,23 +24,40 @@ import axios from "axios";
  */
 const fetchAxios = axios.create({ adapter: "fetch" });
 
-const clientId = process.env.PLAID_CLIENT_ID;
-const secret = process.env.PLAID_SECRET;
-const plaidEnv = process.env.PLAID_ENV === "production" ? "production" : "sandbox";
+/**
+ * Read fresh on every call, deliberately — not cached in top-level `const`s.
+ * On Cloudflare Workers, secrets only land in `process.env` once the first
+ * request reaches this isolate (see the OpenNext adapter's `populateProcessEnv`),
+ * which happens *after* the module's top-level code has already run at Worker
+ * cold start. A top-level `const clientId = process.env.PLAID_CLIENT_ID` would
+ * permanently capture `undefined` — plaidEnabled() and getPlaid() below are
+ * only ever called from inside a request (a Server Action, a route handler, a
+ * page render), so reading process.env at call time is what actually sees the
+ * configured value. Same reasoning as the Proxy in src/lib/db.ts.
+ */
+function credentials(): { clientId: string; secret: string; env: "sandbox" | "production" } | null {
+  const clientId = process.env.PLAID_CLIENT_ID;
+  const secret = process.env.PLAID_SECRET;
+  if (!clientId || !secret) return null;
+  return { clientId, secret, env: process.env.PLAID_ENV === "production" ? "production" : "sandbox" };
+}
 
-export const plaidEnabled = Boolean(clientId && secret);
+export function plaidEnabled(): boolean {
+  return credentials() !== null;
+}
 
 let client: PlaidApi | null = null;
 
 export function getPlaid(): PlaidApi {
-  if (!clientId || !secret) {
+  const creds = credentials();
+  if (!creds) {
     throw new Error("Plaid is not configured. Set PLAID_CLIENT_ID and PLAID_SECRET to enable the bank feed.");
   }
   client ??= new PlaidApi(
     new Configuration({
-      basePath: PlaidEnvironments[plaidEnv],
+      basePath: PlaidEnvironments[creds.env],
       baseOptions: {
-        headers: { "PLAID-CLIENT-ID": clientId, "PLAID-SECRET": secret },
+        headers: { "PLAID-CLIENT-ID": creds.clientId, "PLAID-SECRET": creds.secret },
       },
     }),
     undefined,

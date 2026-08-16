@@ -53,7 +53,7 @@ export default async function PaymentSettingsPage({
         </Banner>
       ) : null}
 
-      {!stripeEnabled ? (
+      {!stripeEnabled() ? (
         <Banner tone="warning" title="Stripe isn't configured on this deployment">
           Set <code className="rounded bg-white/60 px-1 dark:bg-white/10">STRIPE_SECRET_KEY</code> and{" "}
           <code className="rounded bg-white/60 px-1 dark:bg-white/10">STRIPE_WEBHOOK_SECRET</code> in your
@@ -148,7 +148,7 @@ export default async function PaymentSettingsPage({
             reads what&apos;s already landed in your account from anywhere.
           </p>
 
-          {!plaidEnabled ? (
+          {!plaidEnabled() ? (
             <Banner tone="warning" title="Not configured on this deployment">
               Set <code className="rounded bg-white/60 px-1 dark:bg-white/10">PLAID_CLIENT_ID</code>,{" "}
               <code className="rounded bg-white/60 px-1 dark:bg-white/10">PLAID_SECRET</code>, and{" "}

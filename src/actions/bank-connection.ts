@@ -27,7 +27,7 @@ import { appUrl } from "@/lib/email";
 export async function createBankLinkTokenAction(): Promise<
   { ok: true; linkToken: string } | { ok: false; error: string }
 > {
-  if (!plaidEnabled) {
+  if (!plaidEnabled()) {
     return { ok: false, error: "Plaid isn't configured on this deployment yet." };
   }
 
@@ -61,7 +61,7 @@ export async function createBankLinkTokenAction(): Promise<
 export async function exchangeBankPublicTokenAction(publicToken: string): Promise<ActionState> {
   return runAction(async () => {
     const ctx = await assertAdmin();
-    if (!plaidEnabled) return actionError("Plaid isn't configured on this deployment.");
+    if (!plaidEnabled()) return actionError("Plaid isn't configured on this deployment.");
 
     const { accessToken, itemId } = await exchangePublicToken(publicToken);
     const institution = await getInstitutionInfo(accessToken).catch(() => ({

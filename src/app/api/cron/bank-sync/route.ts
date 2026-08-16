@@ -35,7 +35,7 @@ export async function GET(req: Request): Promise<Response> {
   if (!isCronAuthorized(req, "bank-sync")) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!plaidEnabled) {
+  if (!plaidEnabled()) {
     return Response.json({ skipped: "Plaid is not configured." });
   }
 

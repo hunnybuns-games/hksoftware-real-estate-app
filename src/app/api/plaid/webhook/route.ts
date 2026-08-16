@@ -23,7 +23,7 @@ type PlaidWebhookPayload = {
 };
 
 export async function POST(req: Request): Promise<Response> {
-  if (!plaidEnabled) {
+  if (!plaidEnabled()) {
     return Response.json({ error: "Plaid is not configured." }, { status: 503 });
   }
 

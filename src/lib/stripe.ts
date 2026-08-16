@@ -14,19 +14,32 @@ import Stripe from "stripe";
  * online payments aren't enabled yet. Never let a missing key crash a page.
  */
 
-const secretKey = process.env.STRIPE_SECRET_KEY;
+/**
+ * Read fresh on every call, not cached in a top-level `const` — see the
+ * matching comment in src/lib/plaid.ts. On Cloudflare Workers this module's
+ * top-level code runs at Worker cold start, before the first request has
+ * populated process.env with the account's secrets; stripeEnabled() and
+ * getStripe() are only ever called from inside a request, so that's where
+ * the read has to happen.
+ */
+function secretKey(): string | undefined {
+  return process.env.STRIPE_SECRET_KEY;
+}
 
-export const stripeEnabled = Boolean(secretKey);
+export function stripeEnabled(): boolean {
+  return Boolean(secretKey());
+}
 
 let client: Stripe | null = null;
 
 export function getStripe(): Stripe {
-  if (!secretKey) {
+  const key = secretKey();
+  if (!key) {
     throw new Error(
       "Stripe is not configured. Set STRIPE_SECRET_KEY to enable online rent payments.",
     );
   }
-  client ??= new Stripe(secretKey, {
+  client ??= new Stripe(key, {
     // Pinned to the version this SDK's types were generated against, so a
     // Stripe-side upgrade can't silently change payload shapes underneath us.
     // Bump this and the `stripe` dependency together, never separately.

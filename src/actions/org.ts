@@ -98,7 +98,7 @@ export async function startStripeOnboardingAction(_prev: ActionState): Promise<A
 
   const state = await runAction(async () => {
     const ctx = await assertAdmin();
-    if (!stripeEnabled) {
+    if (!stripeEnabled()) {
       return actionError(
         "Stripe isn't configured on this deployment yet. Add STRIPE_SECRET_KEY to enable online rent collection.",
       );
@@ -142,7 +142,7 @@ export async function startStripeOnboardingAction(_prev: ActionState): Promise<A
 export async function refreshStripeStatusAction(_prev: ActionState): Promise<ActionState> {
   return runAction(async () => {
     const ctx = await assertAdmin();
-    if (!stripeEnabled) return actionError("Stripe isn't configured on this deployment.");
+    if (!stripeEnabled()) return actionError("Stripe isn't configured on this deployment.");
 
     const org = await db.organization.findUnique({
       where: { id: ctx.organizationId },
