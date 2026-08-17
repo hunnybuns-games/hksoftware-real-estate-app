@@ -11,10 +11,21 @@ import {
 
 /**
  * Photo picker with a client-side count/size check. The server re-validates
- * everything (see readPhotos) — this exists purely so a tenant on a phone
- * doesn't upload 40 MB before finding out it was rejected.
+ * everything (see src/lib/photos.ts) — this exists purely so someone on a
+ * phone doesn't upload 40 MB before finding out it was rejected.
+ *
+ * `maxCount` defaults to the maintenance-request limit, the first caller this
+ * had; pass a different one (listings allow more) rather than hard-coding it.
  */
-export function PhotoInput({ state }: { state?: ActionState }) {
+export function PhotoInput({
+  state,
+  maxCount = MAX_PHOTOS_PER_REQUEST,
+  hint,
+}: {
+  state?: ActionState;
+  maxCount?: number;
+  hint?: string;
+}) {
   const [names, setNames] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -26,7 +37,7 @@ export function PhotoInput({ state }: { state?: ActionState }) {
         label="Photos"
         name="photos"
         state={state}
-        hint={`Optional. Up to ${MAX_PHOTOS_PER_REQUEST}, ${maxMb} MB each. A photo usually saves a phone call.`}
+        hint={hint ?? `Optional. Up to ${maxCount}, ${maxMb} MB each. A photo usually saves a phone call.`}
       >
         <input
           id="photos"
@@ -36,8 +47,8 @@ export function PhotoInput({ state }: { state?: ActionState }) {
           accept={ALLOWED_PHOTO_TYPES.join(",")}
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
-            if (files.length > MAX_PHOTOS_PER_REQUEST) {
-              setLocalError(`Please pick at most ${MAX_PHOTOS_PER_REQUEST} photos.`);
+            if (files.length > maxCount) {
+              setLocalError(`Please pick at most ${maxCount} photos.`);
             } else {
               const tooBig = files.find((f) => f.size > MAX_PHOTO_BYTES);
               setLocalError(tooBig ? `“${tooBig.name}” is over ${maxMb} MB.` : null);

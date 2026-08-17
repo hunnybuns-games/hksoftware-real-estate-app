@@ -61,6 +61,12 @@ export default async function PropertyDetailPage({
             include: { tenant: { select: { id: true, firstName: true, lastName: true } } },
           },
           _count: { select: { maintenanceRequests: { where: { status: { not: "RESOLVED" } } } } },
+          listings: {
+            where: { status: { not: "ARCHIVED" } },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { id: true },
+          },
         },
       },
     },
@@ -235,6 +241,16 @@ export default async function PropertyDetailPage({
                         title="Public application link — share this with prospects"
                       >
                         Apply link
+                      </Link>
+                      <Link
+                        href={
+                          unit.listings[0]
+                            ? `/app/listings/${unit.listings[0].id}`
+                            : `/app/listings/new?unitId=${unit.id}`
+                        }
+                        className="link mr-3"
+                      >
+                        {unit.listings[0] ? "Listing" : "Advertise it"}
                       </Link>
                       <Link
                         href={`/app/properties/${property.id}/units/${unit.id}`}

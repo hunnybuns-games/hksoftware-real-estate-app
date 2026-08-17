@@ -12,13 +12,9 @@ import {
   parseForm,
   runAction,
 } from "@/lib/forms";
-import {
-  ALLOWED_PHOTO_TYPES,
-  MAX_PHOTOS_PER_REQUEST,
-  MAX_PHOTO_BYTES,
-} from "@/lib/constants";
+import { MAX_PHOTOS_PER_REQUEST } from "@/lib/constants";
 import { notifyMaintenanceCreated, notifyMaintenanceUpdated } from "@/lib/notifications";
-import { detectImageType } from "@/lib/image-signature";
+import { readPhotos } from "@/lib/photos";
 import { auth } from "@/lib/auth";
 
 const requestSchema = z.object({
@@ -58,7 +54,7 @@ export async function createTenantRequestAction(
       );
     }
 
-    const photos = await readPhotos(formData);
+    const photos = await readPhotos(formData, { maxCount: MAX_PHOTOS_PER_REQUEST });
     if (!photos.ok) return photos.state;
 
     const request = await db.maintenanceRequest.create({
@@ -138,7 +134,7 @@ export async function createStaffRequestAction(
     });
     if (!unit) return actionError("Please fix the highlighted fields.", { unitId: "Pick a unit." });
 
-    const photos = await readPhotos(formData);
+    const photos = await readPhotos(formData, { maxCount: MAX_PHOTOS_PER_REQUEST });
     if (!photos.ok) return photos.state;
 
     const request = await db.maintenanceRequest.create({
@@ -286,87 +282,6 @@ export async function addTenantCommentAction(
     revalidatePath(`/app/maintenance/${requestId}`);
     return actionOk("Added.");
   });
-}
-
-/**
- * Reads and validates uploaded photos into rows ready for a nested create.
- * Photos go into the database as bytes — see the note on MaintenancePhoto in
- * schema.prisma for why, and when to move to object storage.
- */
-type PhotoRow = {
-  filename: string;
-  contentType: string;
-  sizeBytes: number;
-  data: Uint8Array<ArrayBuffer>;
-};
-
-async function readPhotos(
-  formData: FormData,
-): Promise<
-  | { ok: true; data: PhotoRow[] }
-  | { ok: false; state: ActionState }
-> {
-  const files = formData
-    .getAll("photos")
-    .filter((f): f is File => f instanceof File && f.size > 0);
-
-  if (files.length > MAX_PHOTOS_PER_REQUEST) {
-    return {
-      ok: false,
-      state: actionError("Please fix the highlighted fields.", {
-        photos: `You can attach up to ${MAX_PHOTOS_PER_REQUEST} photos.`,
-      }),
-    };
-  }
-
-  const rows: PhotoRow[] = [];
-
-  for (const file of files) {
-    if (!ALLOWED_PHOTO_TYPES.includes(file.type as (typeof ALLOWED_PHOTO_TYPES)[number])) {
-      return {
-        ok: false,
-        state: actionError("Please fix the highlighted fields.", {
-          photos: "Photos need to be JPEG, PNG, WebP or HEIC.",
-        }),
-      };
-    }
-    // Size before reading the body, so an oversized upload is rejected without
-    // being pulled into memory first.
-    if (file.size > MAX_PHOTO_BYTES) {
-      return {
-        ok: false,
-        state: actionError("Please fix the highlighted fields.", {
-          photos: `“${file.name}” is larger than ${Math.round(MAX_PHOTO_BYTES / 1024 / 1024)} MB.`,
-        }),
-      };
-    }
-
-    // Uint8Array (not Buffer) — Prisma's Bytes input requires an
-    // ArrayBuffer-backed view, and Buffer.from widens to ArrayBufferLike.
-    const data = new Uint8Array(await file.arrayBuffer());
-
-    // The declared file.type checked above is attacker-controlled; this is what
-    // the bytes actually are. Store and later serve the detected type, never
-    // the claimed one — see src/lib/image-signature.ts.
-    const detected = detectImageType(data);
-    if (!detected) {
-      return {
-        ok: false,
-        state: actionError("Please fix the highlighted fields.", {
-          photos: `“${file.name}” doesn't look like a JPEG, PNG, WebP or HEIC image.`,
-        }),
-      };
-    }
-
-    rows.push({
-      filename: file.name.slice(0, 200) || "photo",
-      contentType: detected,
-      sizeBytes: file.size,
-      data,
-    });
-  }
-
-  return { ok: true, data: rows };
 }
 
 /**

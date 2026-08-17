@@ -1,6 +1,10 @@
 export const MAX_PHOTO_BYTES = 4 * 1024 * 1024; // 4 MB per photo
 export const MAX_PHOTOS_PER_REQUEST = 5;
 
+// A listing benefits from more photos than a maintenance ticket does — this is
+// what gets copy-pasted into Zillow/Realtor.com/etc.
+export const MAX_LISTING_PHOTOS = 12;
+
 export const MAX_IMPORT_CSV_BYTES = 3 * 1024 * 1024; // 3 MB — statements are text, this is generous
 export const MAX_IMPORT_ROWS = 2000;
 export const ALLOWED_PHOTO_TYPES = [

@@ -158,6 +158,28 @@ enum LeaseSignerRole {
   TENANT
 }
 
+enum ListingStatus {
+  DRAFT // being prepared, not yet something to advertise
+  ACTIVE // currently being marketed
+  ARCHIVED // unit got leased, or the listing was pulled
+}
+
+// The external sites a listing can be advertised on. See the comment on
+// ListingPlatformConnection for why none of these are actually wired up to a
+// real API yet.
+enum SyndicationPlatform {
+  ZILLOW
+  REALTOR_COM
+  ZUMPER
+  APARTMENTS_COM
+}
+
+enum ListingSyndicationStatus {
+  NOT_POSTED
+  POSTED
+  NEEDS_REFRESH // posted once, but the listing has since changed (price, availability, etc.)
+}
+
 enum NotificationStatus {
   SENT
   FAILED
@@ -197,6 +219,8 @@ model Organization {
   applications        Application[]
   leaseTemplates      LeaseTemplate[]
   leaseDocuments      LeaseDocument[]
+  listings            Listing[]
+  listingConnections  ListingPlatformConnection[]
 }
 
 /**
@@ -262,6 +286,7 @@ model User {
   passwordResets       PasswordResetToken[]
   applicationsReviewed Application[]
   leaseDocumentsSent   LeaseDocument[]
+  listingsCreated      Listing[]
 
   @@index([organizationId])
 }
@@ -364,6 +389,7 @@ model Unit {
   leases              Lease[]
   maintenanceRequests MaintenanceRequest[]
   applications        Application[]
+  listings            Listing[]
 
   @@unique([propertyId, label])
   @@index([propertyId])
@@ -802,4 +828,103 @@ model Expense {
 
   @@index([organizationId])
   @@index([propertyId, date])
+}
+
+// ---------------------------------------------------------------------------
+// Listings — advertising a vacant unit to find its next tenant.
+//
+// A Listing is per-unit marketing copy (description, photos, asking rent,
+// availability), independent of Application (the intake form a prospect
+// actually fills out) and Lease. ListingSyndication is a *manual* tracker —
+// one row per platform per listing — for staff to record where a listing has
+// actually been posted, because posting itself still happens by hand: see
+// ListingPlatformConnection below and docs/listings.md for why there's no
+// automated push to Zillow/Realtor.com/Zumper/Apartments.com yet.
+// ---------------------------------------------------------------------------
+
+model Listing {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String
+  unit           Unit         @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  title           String
+  description     String
+  // Free text, comma-separated ("In-unit laundry, Pet friendly, Off-street
+  // parking") rather than a separate table — same "don't build a workflow
+  // engine for a small landlord" call as Application.petDetails.
+  amenities       String?
+  askingRentCents Int
+  availableDate   DateTime?
+  status          ListingStatus @default(ACTIVE)
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  photos       ListingPhoto[]
+  syndications ListingSyndication[]
+
+  @@index([organizationId])
+  @@index([unitId])
+}
+
+model ListingPhoto {
+  id          String   @id @default(cuid())
+  listingId   String
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  filename    String
+  contentType String
+  sizeBytes   Int
+  data        Bytes
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([listingId])
+}
+
+// One row per platform a listing could be advertised on, created alongside
+// the Listing so the tracker always shows all four rows immediately (see
+// createListingAction) rather than staff having to add each one by hand.
+model ListingSyndication {
+  id         String                   @id @default(cuid())
+  listingId  String
+  listing    Listing                  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  platform   SyndicationPlatform
+  status     ListingSyndicationStatus @default(NOT_POSTED)
+  // Staff paste the live URL in after posting by hand, so "view listing" is
+  // one click from here — see the section comment above.
+  listingUrl String?
+  postedAt   DateTime?
+  updatedAt  DateTime                 @updatedAt
+
+  @@unique([listingId, platform])
+  @@index([listingId])
+}
+
+/**
+ * Org-level, one row per platform. Everything here is inert today — nothing
+ * in this codebase reads apiKeyEncrypted or calls out to any of these
+ * platforms. It exists so that if/when this organization is approved as a
+ * listing-software partner by Zillow, Realtor.com, Zumper, or Apartments.com
+ * (a real business application to each of them, not something this app can
+ * self-serve — see docs/listings.md), the credential already has somewhere
+ * to live and a future automated-push feature isn't also a migration.
+ * accountLabel/notes are free text for staff's own reference only.
+ */
+model ListingPlatformConnection {
+  id              String              @id @default(cuid())
+  organizationId  String
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  platform        SyndicationPlatform
+  accountLabel    String?
+  apiKeyEncrypted String?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([organizationId, platform])
 }

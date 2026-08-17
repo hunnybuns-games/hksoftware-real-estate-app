@@ -108,6 +108,7 @@ jobs:
       - run: npm run e2e:theme
       - run: npm run e2e:applications
       - run: npm run e2e:lease-signing
+      - run: npm run e2e:listings
 
       # Screenshots from the failing run are the fastest way to see what a
       # browser check actually hit.
