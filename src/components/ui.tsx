@@ -1,8 +1,9 @@
 import Link from "@/components/link";
 import clsx from "clsx";
 import type { ReactNode } from "react";
-import type { ApplicationStatus, PaymentSource } from "@prisma/client";
+import type { ApplicationStatus, LeaseDocumentStatus, PaymentSource } from "@prisma/client";
 import { applicationStatusLabel, applicationStatusTone } from "@/lib/applications";
+import { leaseDocumentStatusLabel, leaseDocumentStatusTone } from "@/lib/lease-document";
 
 export function PageHeader({
   title,
@@ -280,6 +281,11 @@ export function LeaseStatusBadge({ status }: { status: "DRAFT" | "ACTIVE" | "END
 /** Labels/tones come from src/lib/applications.ts — the framework-free source of truth. */
 export function ApplicationStatusBadge({ status }: { status: ApplicationStatus }) {
   return <Badge tone={applicationStatusTone(status)}>{applicationStatusLabel(status)}</Badge>;
+}
+
+/** Labels/tones come from src/lib/lease-document.ts — the framework-free source of truth. */
+export function LeaseDocumentStatusBadge({ status }: { status: LeaseDocumentStatus }) {
+  return <Badge tone={leaseDocumentStatusTone(status)}>{leaseDocumentStatusLabel(status)}</Badge>;
 }
 
 /**

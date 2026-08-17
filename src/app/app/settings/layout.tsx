@@ -8,6 +8,7 @@ const tabs: { href: string; label: string; exact?: boolean }[] = [
   { href: "/app/settings", label: "Organization", exact: true },
   { href: "/app/settings/team", label: "Team" },
   { href: "/app/settings/payments", label: "Rent collection" },
+  { href: "/app/settings/lease-template", label: "Lease template" },
   { href: "/app/settings/outbox", label: "Email log" },
 ];
 

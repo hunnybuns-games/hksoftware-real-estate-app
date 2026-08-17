@@ -17,6 +17,7 @@ import {
   Breadcrumbs,
   Card,
   DescriptionList,
+  LeaseDocumentStatusBadge,
   LeaseStatusBadge,
   PageHeader,
   PaymentSourceBadge,
@@ -64,7 +65,14 @@ export default async function LeaseDetailPage({
   const lease = await getLeaseLedger(leaseId, ctx.organizationId);
   if (!lease) notFound();
 
-  const { units, tenants } = await getLeaseFormOptions(ctx.organizationId);
+  const [{ units, tenants }, documents] = await Promise.all([
+    getLeaseFormOptions(ctx.organizationId),
+    db.leaseDocument.findMany({
+      where: { leaseId: lease.id },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, title: true, status: true, createdAt: true, sentAt: true, completedAt: true },
+    }),
+  ]);
   const { balance } = lease;
   const rentSplit = getRentSplit(lease);
   const tenantName = `${lease.tenant.firstName} ${lease.tenant.lastName}`;
@@ -288,6 +296,40 @@ export default async function LeaseDetailPage({
         </div>
 
         <div className="space-y-6">
+          <Card
+            title="Lease document"
+            description="Build and send the lease for e-signature."
+            actions={
+              <Link href={`/app/leases/${lease.id}/document/new`} className="btn-secondary">
+                {documents.length ? "New version" : "Generate document"}
+              </Link>
+            }
+          >
+            {documents.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Nothing generated yet. Build one from your standard template and this lease&apos;s
+                terms.
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {documents.map((doc) => (
+                  <li key={doc.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/app/leases/${lease.id}/document/${doc.id}`}
+                        className="block truncate text-sm font-medium text-slate-900 hover:underline"
+                      >
+                        {doc.title}
+                      </Link>
+                      <p className="text-xs text-slate-500">{formatDate(doc.createdAt)}</p>
+                    </div>
+                    <LeaseDocumentStatusBadge status={doc.status} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
           <Card
             title="Renter's insurance"
             actions={

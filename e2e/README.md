@@ -22,6 +22,8 @@ npm run e2e                             # or one at a time, see below
 | `npm run e2e:security` | cross-org isolation, signup/login abuse, role boundaries, open redirect, session revocation, CSP | 26 |
 | `npm run e2e:password-reset` | the reset flow: no account enumeration, single-use links, old password revoked | 14 |
 | `npm run e2e:theme` | dark mode: OS default, explicit choice, persistence, and a colour audit of every surface | 33 |
+| `npm run e2e:applications` | public application intake, staff review/approval, convert-to-lease | 18 |
+| `npm run e2e:lease-signing` | lease builder + e-signature: generate, countersign & send, tenant review & sign | 18 |
 
 Each prints one line per check and exits non-zero if any failed.
 

@@ -214,6 +214,59 @@ Review it here: ${appUrl(`/app/applications/${args.applicationId}`)}`,
   });
 }
 
+export function notifyLeaseReadyToSign(args: {
+  to: Recipient;
+  organizationId: string;
+  documentId: string;
+  documentTitle: string;
+  propertyName: string;
+  unitLabel: string;
+}) {
+  return sendEmailSafely({
+    to: args.to.email,
+    type: "LEASE_READY_TO_SIGN",
+    organizationId: args.organizationId,
+    subject: `Your lease for ${args.propertyName} — ${args.unitLabel} is ready to sign`,
+    body: `Hi ${args.to.name},
+
+"${args.documentTitle}" is ready for your signature. Please review it and sign when you're ready.
+
+Review and sign here: ${appUrl(`/portal/lease/document/${args.documentId}`)}
+
+If you don't have a resident portal login yet, contact your property manager to get set up.`,
+  });
+}
+
+/**
+ * Sent to the staff member who sent the document, once every required
+ * signature is in. There's no account behind a "landlord" role here — it's
+ * whichever staff user clicked Send — so this is skipped rather than
+ * fanned out to the whole team when that user no longer exists.
+ */
+export function notifyLeaseSigned(args: {
+  to: Recipient;
+  organizationId: string;
+  orgName: string;
+  documentId: string;
+  leaseId: string;
+  documentTitle: string;
+  tenantName: string;
+}) {
+  return sendEmailSafely({
+    to: args.to.email,
+    type: "LEASE_SIGNED",
+    organizationId: args.organizationId,
+    subject: `Fully signed: ${args.documentTitle}`,
+    body: `Hi ${args.to.name},
+
+${args.tenantName} has signed "${args.documentTitle}". Every required signature is now on file.
+
+View it here: ${appUrl(`/app/leases/${args.leaseId}/document/${args.documentId}`)}
+
+— ${args.orgName}`,
+  });
+}
+
 /**
  * Sent to the applicant, not a signed-in user — there's no account behind this
  * address, so unlike every other notify* here this is never deduped or tied to

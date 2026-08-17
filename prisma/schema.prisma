@@ -134,6 +134,8 @@ enum NotificationType {
   PASSWORD_RESET
   APPLICATION_RECEIVED
   APPLICATION_DECIDED
+  LEASE_READY_TO_SIGN
+  LEASE_SIGNED
 }
 
 enum ApplicationStatus {
@@ -142,6 +144,18 @@ enum ApplicationStatus {
   APPROVED
   DENIED
   WITHDRAWN // applicant pulled out, or staff closed it as no longer relevant
+}
+
+enum LeaseDocumentStatus {
+  DRAFT // being assembled by staff, not yet visible to the tenant
+  SENT // staff has countersigned and it's waiting on the tenant
+  SIGNED // every required signer has signed
+  VOIDED // staff cancelled it before it was fully signed
+}
+
+enum LeaseSignerRole {
+  LANDLORD // countersigned by staff when the document is sent
+  TENANT
 }
 
 enum NotificationStatus {
@@ -181,6 +195,8 @@ model Organization {
   expenses            Expense[]
   bankConnection      BankConnection?
   applications        Application[]
+  leaseTemplates      LeaseTemplate[]
+  leaseDocuments      LeaseDocument[]
 }
 
 /**
@@ -245,6 +261,7 @@ model User {
   importBatches        PaymentImportBatch[]
   passwordResets       PasswordResetToken[]
   applicationsReviewed Application[]
+  leaseDocumentsSent   LeaseDocument[]
 
   @@index([organizationId])
 }
@@ -424,6 +441,7 @@ model Lease {
   // Set on the Application this lease was created from, when it was created
   // that way — see Application.leaseId below.
   application         Application?
+  documents           LeaseDocument[]
 
   @@index([organizationId])
   @@index([unitId])
@@ -652,6 +670,94 @@ model Application {
 
   @@index([organizationId, status])
   @@index([unitId])
+}
+
+// ---------------------------------------------------------------------------
+// Lease documents & e-signature
+//
+// LeaseTemplate is the org's reusable base wording — one standard template per
+// org today (see src/lib/lease-document.ts for how it's lazily created), with
+// {{token}} merge fields and [[#clauseId]]...[[/clauseId]] optional blocks
+// staff can toggle per document. LeaseDocument is an immutable *snapshot*:
+// once merged, its body never changes even if the template is edited later,
+// so a document a tenant already signed can't silently drift out from under
+// their signature. LeaseSignature is the audit trail an electronic signature
+// needs under the U.S. ESIGN Act — who signed, what they typed/drew, and the
+// IP/user-agent/timestamp it happened under — not a real-time signing
+// session. See docs/lease-signing.md.
+// ---------------------------------------------------------------------------
+
+model LeaseTemplate {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  // Plain text, never HTML — merged bodies are rendered with
+  // white-space:pre-wrap, so no markup layer is needed and there's nothing
+  // here that ever needs sanitizing before it's shown.
+  body           String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  documents LeaseDocument[]
+
+  @@index([organizationId])
+}
+
+model LeaseDocument {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leaseId        String
+  lease          Lease          @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  templateId     String?
+  template       LeaseTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  title  String
+  // The fully merged document text at generation time — see the section
+  // comment above on why this is a snapshot, not a live re-render.
+  body   String
+  status LeaseDocumentStatus @default(DRAFT)
+
+  createdById String?
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  sentAt      DateTime?
+  completedAt DateTime?
+  voidedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  signatures LeaseSignature[]
+
+  @@index([organizationId])
+  @@index([leaseId])
+}
+
+model LeaseSignature {
+  id         String          @id @default(cuid())
+  documentId String
+  document   LeaseDocument   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  role       LeaseSignerRole
+
+  signerName  String
+  signerEmail String
+
+  // Null until signed — a document is created with placeholder rows for each
+  // required signer (see sendLeaseDocumentAction) so "who still needs to
+  // sign" is always a query over this table, not separately tracked state.
+  signedAt       DateTime?
+  typedSignature String?
+  // A freehand signature drawn on-screen, as a PNG. Optional on top of the
+  // typed name, not instead of it — the typed name plus this audit trail is
+  // what makes the signature valid, not the drawing itself.
+  signatureImage Bytes?
+  ipAddress      String?
+  userAgent      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([documentId])
 }
 
 // ---------------------------------------------------------------------------

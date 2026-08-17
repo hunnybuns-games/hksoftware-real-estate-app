@@ -10,6 +10,10 @@ export const ALLOWED_PHOTO_TYPES = [
   "image/heic",
 ] as const;
 
+// A drawn signature is a small canvas doodle, not a photo — this caps it well
+// under MAX_PHOTO_BYTES while leaving plenty of room for a high-DPI capture.
+export const MAX_SIGNATURE_IMAGE_BYTES = 300 * 1024; // 300 KB
+
 export const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID",
   "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO",
