@@ -64,6 +64,12 @@ const browser = await launchBrowser();
 
   // Create a property (real write)
   await page.goto(`${BASE}/app/properties/new`, { waitUntil: "domcontentloaded" });
+  // domcontentloaded fires once the HTML is parsed, not once React has
+  // hydrated it — a fill-then-click run right after can click the submit
+  // button before its handler is wired up, a dead click with no error and
+  // no navigation. This form got enough heavier (the address-autocomplete
+  // component) that the race went from theoretical to something CI hit.
+  await page.waitForLoadState("networkidle").catch(() => {});
   await page.fill('input[name="name"]', "Birch Row");
   await page.fill('input[name="addressLine1"]', "9 Birch Row");
   await page.fill('input[name="city"]', "Portland");
@@ -102,6 +108,7 @@ const browser = await launchBrowser();
 
   // Money validation
   await page.goto(`${BASE}/app/properties/new`, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle").catch(() => {}); // see comment above
   await page.fill('input[name="name"]', "Bad ZIP Test");
   await page.fill('input[name="addressLine1"]', "1 Test");
   await page.fill('input[name="city"]', "Portland");

@@ -23,6 +23,11 @@ log("org A signup lands in /app", pageA.url().includes("/app"));
 
 // Create a property in org A to get a real resource id.
 await pageA.goto(`${BASE}/app/properties/new`);
+// A fill-then-click right after goto can beat React's hydration to the
+// punch — a dead click on the submit button, no navigation, no error. See
+// the same comment in mvp.mjs, where this form's growth (address
+// autocomplete) first made the race show up.
+await pageA.waitForLoadState("networkidle").catch(() => {});
 await pageA.locator('input[name="name"]').fill("A-Only Property");
 await pageA.locator('input[name="addressLine1"]').fill("1 A St");
 await pageA.locator('input[name="city"]').fill("Testville");

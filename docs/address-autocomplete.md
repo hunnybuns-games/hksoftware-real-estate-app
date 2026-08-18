@@ -67,3 +67,14 @@ slightly differently than expected, addresses would fall back to filling in
 less than all four fields — never break, per the previous section, but worth
 a real test once you've got a token: type a real address and confirm city/
 state/ZIP land correctly, not just `addressLine1`.
+
+One CI wrinkle this surfaced: CI sets `NEXT_PUBLIC_MAPBOX_TOKEN` so this
+suite can run, but that token is live for the *whole* e2e job, not just this
+suite — every other test that fills the property address field in passing
+(`e2e:mvp`, `e2e:security`, `e2e:theme`) would otherwise fire a real,
+unmocked request to Mapbox and race it against the rest of a fast form fill.
+It doesn't break the field itself (still degrades to "no suggestions" on any
+error), but it's slow and unreliable, and it did in fact fail a CI run this
+way once. `e2e/_shared.mjs`'s `launchBrowser()` now stubs `api.mapbox.com`
+with an empty result on every context by default; this suite overrides that
+with its own page-level routes, which Playwright always prefers.

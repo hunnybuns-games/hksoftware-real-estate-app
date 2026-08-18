@@ -218,6 +218,11 @@ await page.waitForURL(/\/app/, { timeout: 15000 });
 // A property and a unit, so the list and detail screens have something to paint
 // other than empty states.
 await page.goto(`${BASE}/app/properties/new`);
+// A fill-then-click right after goto can beat React's hydration to the
+// punch — a dead click on the submit button, no navigation, no error. See
+// the same comment in mvp.mjs, where this form's growth (address
+// autocomplete) first made the race show up.
+await page.waitForLoadState("networkidle").catch(() => {});
 await page.locator('input[name="name"]').fill("Dark Mode Manor");
 await page.locator('input[name="addressLine1"]').fill("1 Night St");
 await page.locator('input[name="city"]').fill("Testville");

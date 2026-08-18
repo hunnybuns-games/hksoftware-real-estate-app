@@ -34,5 +34,26 @@ export function artifactPath(name) {
 export async function launchBrowser() {
   mkdirSync(ARTIFACTS, { recursive: true });
   const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH;
-  return chromium.launch(executablePath ? { executablePath } : {});
+  const browser = await chromium.launch(executablePath ? { executablePath } : {});
+
+  // The property form's address field (src/components/address-autocomplete-input.tsx)
+  // calls out to Mapbox whenever NEXT_PUBLIC_MAPBOX_TOKEN is set, which CI does so
+  // e2e:address-autocomplete can exercise it. Every *other* suite that just fills
+  // that field in passing (mvp, security, theme) has no reason to make that a real
+  // network call, and CI found out the hard way that letting one through is a
+  // flakiness source, not a hazard to the field itself — the component degrades to
+  // "no suggestions" on any error, but a genuinely slow/unreliable request can still
+  // race the rest of a fast form fill. So every context gets an empty-results stub
+  // by default; page-level routes (Playwright always prefers them over a context's)
+  // let e2e/address-autocomplete.mjs override this with the real fixtures it tests.
+  const newContext = browser.newContext.bind(browser);
+  browser.newContext = async (options) => {
+    const context = await newContext(options);
+    await context.route("https://api.mapbox.com/**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ features: [] }) }),
+    );
+    return context;
+  };
+
+  return browser;
 }

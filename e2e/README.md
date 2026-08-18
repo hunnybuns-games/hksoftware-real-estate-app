@@ -51,6 +51,10 @@ Each prints one line per check and exits non-zero if any failed.
 
 Stripe and Plaid are never really contacted — Stripe payments go through the
 demo-mode simulation path, and there is no bank-feed coverage at all. See
-`docs/MAINTAINER.md` §13 for the current state of that. Mapbox is mocked too
-(`e2e:address-autocomplete`) — see docs/address-autocomplete.md for what that
-does and doesn't prove.
+`docs/MAINTAINER.md` §13 for the current state of that. Mapbox is mocked too:
+`_shared.mjs`'s `launchBrowser()` stubs `api.mapbox.com` with an empty result
+on every context by default (CI runs with `NEXT_PUBLIC_MAPBOX_TOKEN` set, so
+any suite that fills the property address field would otherwise fire a real,
+unreliable request it isn't testing). `e2e:address-autocomplete` overrides
+that stub with its own page-level routes — see docs/address-autocomplete.md
+for what that does and doesn't prove.
