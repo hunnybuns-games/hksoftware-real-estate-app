@@ -18,7 +18,7 @@ import {
   syndicationPlatformManualUrl,
 } from "@/lib/listing";
 import { MAX_LISTING_PHOTOS } from "@/lib/constants";
-import { Breadcrumbs, Card, ListingStatusBadge, PageHeader } from "@/components/ui";
+import { Badge, Breadcrumbs, Card, ListingStatusBadge, PageHeader } from "@/components/ui";
 import { ActionButton } from "@/components/action-button";
 import { Disclosure } from "@/components/disclosure";
 import { EditListingForm } from "../_components/edit-listing-form";
@@ -109,7 +109,11 @@ export default async function ListingDetailPage({
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="space-y-6">
-          <Card title="Syndication tracker" description="Where this listing has been posted, tracked by hand.">
+          <Card
+            title="Syndication tracker"
+            description="Where this listing has been posted, tracked by hand."
+            actions={<Badge tone="amber">Beta — manual</Badge>}
+          >
             <div className="space-y-3">
               {SYNDICATION_PLATFORMS.map((platform) => {
                 const row = syndicationByPlatform.get(platform);

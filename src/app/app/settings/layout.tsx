@@ -4,12 +4,12 @@ import { requireStaff } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui";
 import { NavLink } from "@/components/nav-link";
 
-const tabs: { href: string; label: string; exact?: boolean }[] = [
+const tabs: { href: string; label: string; tag?: string; exact?: boolean }[] = [
   { href: "/app/settings", label: "Organization", exact: true },
   { href: "/app/settings/team", label: "Team" },
   { href: "/app/settings/payments", label: "Rent collection" },
   { href: "/app/settings/lease-template", label: "Lease template" },
-  { href: "/app/settings/listing-syndication", label: "Listing syndication" },
+  { href: "/app/settings/listing-syndication", label: "Listing syndication", tag: "Beta" },
   { href: "/app/settings/outbox", label: "Email log" },
 ];
 
@@ -34,7 +34,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
       <div className="grid gap-6 lg:grid-cols-[13rem_1fr]">
         <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
           {tabs.map((tab) => (
-            <NavLink key={tab.href} href={tab.href} exact={tab.exact}>
+            <NavLink key={tab.href} href={tab.href} tag={tab.tag} exact={tab.exact}>
               {tab.label}
             </NavLink>
           ))}

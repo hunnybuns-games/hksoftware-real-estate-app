@@ -45,7 +45,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/app", label: "Dashboard", exact: true },
     { href: "/app/properties", label: "Properties" },
     { href: "/app/tenants", label: "Tenants" },
-    { href: "/app/listings", label: "Listings" },
+    // Beta: the syndication tracker is a manual record, not a live push to
+    // Zillow/Realtor.com/Zumper/Apartments.com — see docs/listings.md. Lifts
+    // once a real platform integration ships.
+    { href: "/app/listings", label: "Listings", tag: "Beta" },
     { href: "/app/applications", label: "Applications", badge: pendingApplications },
     { href: "/app/leases", label: "Leases" },
     { href: "/app/payments", label: "Rent" },

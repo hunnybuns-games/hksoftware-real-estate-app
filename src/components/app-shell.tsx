@@ -6,7 +6,14 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { NavLink } from "@/components/nav-link";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-export type NavItem = { href: string; label: string; badge?: number; exact?: boolean };
+export type NavItem = {
+  href: string;
+  label: string;
+  badge?: number;
+  /** Status label ("Beta") for a feature that's still partial — see NavLink. */
+  tag?: string;
+  exact?: boolean;
+};
 
 /**
  * One shell for all three audiences. Staff get a sidebar (desktop-first, which
@@ -38,7 +45,7 @@ export function SidebarShell({
         {/* Horizontally scrolling nav on mobile, vertical list on desktop. */}
         <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 px-3 pb-3 lg:flex-col lg:overflow-visible lg:border-b-0 lg:px-3 lg:pb-0">
           {nav.map((item) => (
-            <NavLink key={item.href} href={item.href} badge={item.badge} exact={item.exact}>
+            <NavLink key={item.href} href={item.href} badge={item.badge} tag={item.tag} exact={item.exact}>
               {item.label}
             </NavLink>
           ))}
@@ -47,7 +54,7 @@ export function SidebarShell({
         {secondaryNav?.length ? (
           <nav className="mt-auto hidden gap-1 border-t border-slate-200 px-3 py-3 lg:flex lg:flex-col">
             {secondaryNav.map((item) => (
-              <NavLink key={item.href} href={item.href} badge={item.badge}>
+              <NavLink key={item.href} href={item.href} badge={item.badge} tag={item.tag}>
                 {item.label}
               </NavLink>
             ))}
@@ -111,7 +118,7 @@ export function TopbarShell({
         </div>
         <nav className="mx-auto flex w-full max-w-3xl gap-1 overflow-x-auto px-3 pb-2.5">
           {nav.map((item) => (
-            <NavLink key={item.href} href={item.href} badge={item.badge} exact={item.exact}>
+            <NavLink key={item.href} href={item.href} badge={item.badge} tag={item.tag} exact={item.exact}>
               {item.label}
             </NavLink>
           ))}

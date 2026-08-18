@@ -17,14 +17,15 @@ export function PageHeader({
   subtitle,
   actions,
 }: {
-  title: string;
+  /** Usually a string; widened to ReactNode so a page can drop in an inline status Badge next to it. */
+  title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
         {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}

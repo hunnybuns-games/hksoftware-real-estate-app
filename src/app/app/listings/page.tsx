@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";
 import { formatCents } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
-import { Card, EmptyState, ListingStatusBadge, PageHeader, Table } from "@/components/ui";
+import { Badge, Card, EmptyState, ListingStatusBadge, PageHeader, Table } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Listings" };
 
@@ -56,7 +56,11 @@ export default async function ListingsPage({
   return (
     <>
       <PageHeader
-        title="Listings"
+        title={
+          <>
+            Listings <Badge tone="amber">Beta</Badge>
+          </>
+        }
         subtitle={
           activeCount === 0
             ? "Nothing being advertised right now"
