@@ -68,6 +68,12 @@ jobs:
       # is what first hit that in CI. Thrown away after each run; nothing
       # real is ever encrypted with it.
       BANK_TOKEN_ENCRYPTION_KEY: "VpWqABrbZTaJK6SJZc+vy5/1fi/5L2YjybVKegJkRPA="
+      # Gates address-autocomplete's lookup on/off (src/lib/geocoding.ts
+      # mapboxEnabled()) — e2e:address-autocomplete needs it truthy to
+      # exercise that code path at all, but never makes a real request: the
+      # suite mocks api.mapbox.com via Playwright route interception, so an
+      # invalid value here is fine.
+      NEXT_PUBLIC_MAPBOX_TOKEN: "pk.ci-fake-token-requests-are-mocked"
     steps:
       - uses: actions/checkout@v4
 
@@ -115,6 +121,7 @@ jobs:
       - run: npm run e2e:applications
       - run: npm run e2e:lease-signing
       - run: npm run e2e:listings
+      - run: npm run e2e:address-autocomplete
 
       # Screenshots from the failing run are the fastest way to see what a
       # browser check actually hit.

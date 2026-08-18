@@ -59,9 +59,11 @@ function policy(nonce: string, isDev: boolean): string {
     // base64 institution logos Plaid returns for a connected bank.
     "img-src 'self' data:",
     "font-src 'self'",
-    // Plaid Link is the only third party the browser talks to. Stripe isn't here
-    // because Checkout is a redirect to Stripe's own origin, not an embed.
-    "connect-src 'self' https://*.plaid.com",
+    // Plaid Link and Mapbox's Geocoding API (address autocomplete on the
+    // property form, src/components/address-autocomplete-input.tsx) are the
+    // only third parties the browser talks to. Stripe isn't here because
+    // Checkout is a redirect to Stripe's own origin, not an embed.
+    "connect-src 'self' https://*.plaid.com https://api.mapbox.com",
     "frame-src https://*.plaid.com",
     // No page in this app has any business being framed. Same intent as the
     // X-Frame-Options header in next.config.ts, which is kept for older browsers
