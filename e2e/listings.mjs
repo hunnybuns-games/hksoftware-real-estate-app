@@ -124,8 +124,19 @@ let listingId;
   await zillowBadge.waitFor({ timeout: 10000 });
 
   check("Zillow's row now reads Posted", (await zillowBadge.count()) === 1);
+  // The Save click revalidates the page, which can swap the row's DOM in
+  // (replacing "Copy for Zillow" with a fresh button node) slightly after the
+  // badge text itself updates. Clicking too early can land in that gap — a
+  // dead click, no writeText call, no "Copied!". Give the revalidation time
+  // to fully settle before clicking again.
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await page.waitForTimeout(300);
 
   await zillowRow.locator('button:has-text("Copy for Zillow")').click();
+  // writeText() is async (see CopyButton) — its own "Copied!" label only
+  // shows once that promise resolves, so wait for it rather than reading the
+  // clipboard immediately and racing the write.
+  await zillowRow.locator('button:has-text("Copied!")').waitFor({ timeout: 5000 });
   const clipboard = await page.evaluate(() => navigator.clipboard.readText());
   check("the copy button puts the formatted listing text on the clipboard", clipboard.includes("In-unit laundry"));
   check("the copied text includes the asking rent", clipboard.includes("month"));
