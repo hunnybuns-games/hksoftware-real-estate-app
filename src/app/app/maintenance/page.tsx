@@ -52,6 +52,7 @@ export default async function MaintenancePage({
       include: {
         unit: { select: { label: true, property: { select: { name: true } } } },
         lease: { select: { tenant: { select: { firstName: true, lastName: true } } } },
+        assignedVendor: { select: { name: true } },
         _count: { select: { photos: true, notes: true } },
       },
     }),
@@ -79,13 +80,18 @@ export default async function MaintenancePage({
           openCount === 0 ? "Nothing open right now" : `${openCount} open request${openCount === 1 ? "" : "s"}`
         }
         actions={
-          units.length > 0 ? (
-            <Disclosure label="Log a request" variant="primary">
-              <div className="card max-w-2xl p-5">
-                <StaffRequestForm action={createStaffRequestAction} units={units} />
-              </div>
-            </Disclosure>
-          ) : null
+          <>
+            <Link href="/app/maintenance/vendors" className="btn-secondary">
+              Vendors
+            </Link>
+            {units.length > 0 ? (
+              <Disclosure label="Log a request" variant="primary">
+                <div className="card max-w-2xl p-5">
+                  <StaffRequestForm action={createStaffRequestAction} units={units} />
+                </div>
+              </Disclosure>
+            ) : null}
+          </>
         }
       />
 
@@ -123,6 +129,7 @@ export default async function MaintenancePage({
                 <th className="th">Request</th>
                 <th className="th">Unit</th>
                 <th className="th">Resident</th>
+                <th className="th">Vendor</th>
                 <th className="th">Priority</th>
                 <th className="th">Status</th>
                 <th className="th">Opened</th>
@@ -160,6 +167,9 @@ export default async function MaintenancePage({
                   {r.lease
                     ? `${r.lease.tenant.firstName} ${r.lease.tenant.lastName}`
                     : <span className="text-slate-400">—</span>}
+                </td>
+                <td className="td text-slate-500">
+                  {r.assignedVendor?.name ?? <span className="text-slate-400">—</span>}
                 </td>
                 <td className="td">
                   <PriorityBadge priority={r.priority} />

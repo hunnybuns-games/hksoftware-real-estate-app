@@ -1,6 +1,6 @@
 # End-to-end suites
 
-Ten Playwright scripts that drive a real browser against a running dev server.
+Eleven Playwright scripts that drive a real browser against a running dev server.
 They're plain Node scripts rather than a Playwright test-runner project on
 purpose — each one reads top-to-bottom as a description of the flow it checks,
 which is what you want when one fails at 2am and you need to know what it was
@@ -26,6 +26,7 @@ npm run e2e                             # or one at a time, see below
 | `npm run e2e:lease-signing` | lease builder + e-signature: generate, countersign & send, tenant review & sign | 17 |
 | `npm run e2e:listings` | listing builder, photo upload, syndication tracker, copy-paste export, platform-connection settings | 21 |
 | `npm run e2e:address-autocomplete` | property-form address autocomplete: suggestion fill, graceful degradation, CSP (Mapbox mocked, never really contacted) | 12 |
+| `npm run e2e:vendors` | vendor directory: add/edit, assign/unassign on a maintenance request, archive/reactivate | 13 |
 
 Each prints one line per check and exits non-zero if any failed.
 

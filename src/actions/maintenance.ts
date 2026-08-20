@@ -252,6 +252,73 @@ export async function updateRequestAction(
   });
 }
 
+const assignVendorSchema = z.object({
+  vendorId: z
+    .string()
+    .optional()
+    .transform((v) => (v === "" ? null : (v ?? null))),
+});
+
+/**
+ * Assigning or clearing a vendor. Deliberately its own action rather than a
+ * field folded into updateRequestAction — status changes and vendor
+ * assignment happen independently (you might assign a vendor days before
+ * anything actually starts), and keeping them separate means picking a
+ * vendor never has to also restate the current status.
+ */
+export async function assignVendorAction(
+  requestId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const ctx = await assertStaff();
+    const parsed = parseForm(assignVendorSchema, formData);
+    if (!parsed.ok) return parsed.state;
+
+    const request = await db.maintenanceRequest.findFirst({
+      where: { id: requestId, organizationId: ctx.organizationId },
+      select: { id: true, assignedVendorId: true },
+    });
+    if (!request) return actionError("That request no longer exists.");
+
+    let vendor: { id: string; name: string } | null = null;
+    if (parsed.data.vendorId) {
+      vendor = await db.vendor.findFirst({
+        where: { id: parsed.data.vendorId, organizationId: ctx.organizationId },
+        select: { id: true, name: true },
+      });
+      if (!vendor) {
+        return actionError("Please fix the highlighted fields.", { vendorId: "Pick a vendor." });
+      }
+    }
+
+    if (vendor?.id === request.assignedVendorId || (!vendor && !request.assignedVendorId)) {
+      return actionOk();
+    }
+
+    await db.maintenanceRequest.update({
+      where: { id: request.id },
+      data: { assignedVendorId: vendor?.id ?? null },
+    });
+    // Leaves the same audit trail a status change does — anyone reading the
+    // activity log later can see who was assigned and when without cross-
+    // referencing the vendor directory.
+    await db.maintenanceNote.create({
+      data: {
+        requestId: request.id,
+        authorId: ctx.id,
+        body: vendor ? `Assigned to ${vendor.name}.` : "Vendor unassigned.",
+        internal: true,
+      },
+    });
+
+    revalidatePath(`/app/maintenance/${requestId}`);
+    revalidatePath("/app/maintenance");
+    return actionOk(vendor ? `Assigned to ${vendor.name}.` : "Unassigned.");
+  });
+}
+
 /** Tenants can add follow-up detail to their own request. */
 export async function addTenantCommentAction(
   requestId: string,

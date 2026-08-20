@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { requireStaff, staffOrganizationIdForMetadata } from "@/lib/rbac";
-import { updateRequestAction } from "@/actions/maintenance";
+import { assignVendorAction, updateRequestAction } from "@/actions/maintenance";
 import { formatDateTime } from "@/lib/dates";
 import {
   Badge,
@@ -15,6 +15,7 @@ import {
   PriorityBadge,
 } from "@/components/ui";
 import { UpdateRequestForm } from "./_components/update-request-form";
+import { AssignVendorForm } from "./_components/assign-vendor-form";
 
 export async function generateMetadata({
   params,
@@ -42,24 +43,35 @@ export default async function RequestDetailPage({
   const ctx = await requireStaff();
   const { requestId } = await params;
 
-  const request = await db.maintenanceRequest.findFirst({
-    where: { id: requestId, organizationId: ctx.organizationId },
-    include: {
-      unit: { select: { id: true, label: true, property: { select: { id: true, name: true } } } },
-      lease: {
-        select: {
-          id: true,
-          tenant: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+  const [request, vendors] = await Promise.all([
+    db.maintenanceRequest.findFirst({
+      where: { id: requestId, organizationId: ctx.organizationId },
+      include: {
+        unit: { select: { id: true, label: true, property: { select: { id: true, name: true } } } },
+        lease: {
+          select: {
+            id: true,
+            tenant: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+          },
+        },
+        createdBy: { select: { name: true, role: true } },
+        assignedVendor: { select: { id: true, name: true, trade: true, email: true, phone: true } },
+        photos: { select: { id: true, filename: true }, orderBy: { createdAt: "asc" } },
+        notes: {
+          orderBy: { createdAt: "asc" },
+          include: { author: { select: { name: true, role: true } } },
         },
       },
-      createdBy: { select: { name: true, role: true } },
-      photos: { select: { id: true, filename: true }, orderBy: { createdAt: "asc" } },
-      notes: {
-        orderBy: { createdAt: "asc" },
-        include: { author: { select: { name: true, role: true } } },
-      },
-    },
-  });
+    }),
+    // Every vendor, not just active ones — if the currently assigned vendor
+    // has since been archived, the dropdown still needs to show them as
+    // selected rather than silently falling back to "Unassigned".
+    db.vendor.findMany({
+      where: { organizationId: ctx.organizationId },
+      orderBy: [{ active: "desc" }, { name: "asc" }],
+      select: { id: true, name: true, trade: true, active: true },
+    }),
+  ]);
   if (!request) notFound();
 
   const tenant = request.lease?.tenant;
@@ -199,6 +211,33 @@ export default async function RequestDetailPage({
                 This request isn&apos;t tied to a lease — the unit was vacant when it was logged.
               </p>
             )}
+          </Card>
+
+          <Card title="Vendor">
+            <AssignVendorForm
+              action={assignVendorAction.bind(null, request.id)}
+              vendors={vendors}
+              currentVendorId={request.assignedVendorId}
+            />
+            {request.assignedVendor && (request.assignedVendor.email || request.assignedVendor.phone) ? (
+              <div className="mt-3 space-y-0.5 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                {request.assignedVendor.phone ? <p>{request.assignedVendor.phone}</p> : null}
+                {request.assignedVendor.email ? (
+                  <a href={`mailto:${request.assignedVendor.email}`} className="link block">
+                    {request.assignedVendor.email}
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+            {vendors.length === 0 ? (
+              <p className="mt-3 text-xs text-slate-500">
+                No vendors yet —{" "}
+                <Link href="/app/maintenance/vendors/new" className="link">
+                  add one
+                </Link>
+                .
+              </p>
+            ) : null}
           </Card>
 
           <Card title="Timeline">

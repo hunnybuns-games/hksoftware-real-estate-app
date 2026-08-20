@@ -687,6 +687,10 @@ layout's `generateMetadata()` is a function for the same reason.
 - **Maintenance photos are blobs in D1.** Up to 5 × 4 MB per request, against a 500 MB
   (free) or 10 GB (paid) per-database ceiling. Deliberate simplification for shipping; R2
   is the destination, and `canViewPhoto`'s authorization check carries over unchanged.
+- **Vendors (`docs/vendors.md`) are a directory, not a workflow yet.** Assigning one to a
+  maintenance request is a note to staff, not a notification to the vendor — no vendor
+  login, no scheduling, no cost tracking tied to a request or vendor record. The framework
+  a fuller build sits on top of, not the fuller build.
 - **No legal pages.** No Terms of Service, no Privacy Policy — both are also prerequisites
   for Plaid and Stripe production access, so this blocks going live regardless.
 

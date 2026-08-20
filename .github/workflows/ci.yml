@@ -122,6 +122,7 @@ jobs:
       - run: npm run e2e:lease-signing
       - run: npm run e2e:listings
       - run: npm run e2e:address-autocomplete
+      - run: npm run e2e:vendors
 
       # Screenshots from the failing run are the fastest way to see what a
       # browser check actually hit.

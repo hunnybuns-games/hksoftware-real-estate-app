@@ -221,6 +221,7 @@ model Organization {
   leaseDocuments      LeaseDocument[]
   listings            Listing[]
   listingConnections  ListingPlatformConnection[]
+  vendors             Vendor[]
 }
 
 /**
@@ -597,6 +598,10 @@ model MaintenanceRequest {
   lease           Lease?       @relation(fields: [leaseId], references: [id], onDelete: SetNull)
   createdByUserId String?
   createdBy       User?        @relation("MaintenanceRequestCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  // Optional and org-scoped, not tenant-facing (see Vendor below) — assigning
+  // or clearing this never touches the tenant portal.
+  assignedVendorId String?
+  assignedVendor   Vendor?      @relation(fields: [assignedVendorId], references: [id], onDelete: SetNull)
 
   title       String
   description String
@@ -611,6 +616,35 @@ model MaintenanceRequest {
 
   @@index([organizationId, status])
   @@index([unitId])
+  @@index([assignedVendorId])
+}
+
+// A landlord's own directory of contractors/vendors — not a marketplace, not
+// tied to any listing-platform integration, just who to call. `active` is a
+// soft-delete: archiving a vendor keeps their name attached to every past
+// MaintenanceRequest.assignedVendor (onDelete: SetNull above would otherwise
+// erase "who fixed this" from history the moment a vendor is retired).
+model Vendor {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name        String
+  // Free text on purpose — "Plumbing", "HVAC", "Locksmith", whatever the
+  // landlord actually calls it. A fixed enum would just fight real vendors
+  // who cover more than one trade.
+  trade       String?
+  contactName String?
+  email       String?
+  phone       String?
+  notes       String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requests MaintenanceRequest[]
+
+  @@index([organizationId, active])
 }
 
 // Photos live in the database as bytes. This keeps the MVP deployable with nothing
