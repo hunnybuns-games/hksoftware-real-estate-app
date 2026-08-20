@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { requireStaff, staffOrganizationIdForMetadata } from "@/lib/rbac";
 import { getLeaseLedger } from "@/lib/ledger";
 import { getLeaseFormOptions } from "@/lib/lease-options";
-import { endLeaseAction, updateLeaseAction, updateLeaseInsuranceAction } from "@/actions/leases";
+import { updateLeaseAction, updateLeaseInsuranceAction } from "@/actions/leases";
 import { addChargeAction, recordManualPaymentAction, voidChargeAction } from "@/actions/payments";
 import { centsToInputValue, formatCents } from "@/lib/money";
 import { formatDate, ordinalDay, relativeDays, toDateInputValue } from "@/lib/dates";
@@ -26,13 +26,13 @@ import {
   StatTile,
   Table,
 } from "@/components/ui";
-import { ActionButton } from "@/components/action-button";
 import { Disclosure } from "@/components/disclosure";
 import { LeaseForm } from "../_components/lease-form";
 import { RecordPaymentForm } from "./_components/record-payment-form";
 import { AddChargeForm } from "./_components/add-charge-form";
 import { VoidChargeButton } from "./_components/void-charge-button";
 import { InsuranceForm } from "./_components/insurance-form";
+import { EndLeaseSection } from "./_components/end-lease-section";
 
 export async function generateMetadata({
   params,
@@ -387,18 +387,7 @@ export default async function LeaseDetailPage({
             />
           </Card>
 
-          {lease.status === "ACTIVE" ? (
-            <Card title="End this lease">
-              <p className="mb-3 text-sm text-slate-500">
-                Marks the lease ended and the unit vacant. Charges and payments stay on the record.
-              </p>
-              <ActionButton
-                action={endLeaseAction.bind(null, lease.id)}
-                label="End lease"
-                pendingLabel="Ending…"
-              />
-            </Card>
-          ) : null}
+          <EndLeaseSection leaseId={lease.id} active={lease.status === "ACTIVE"} />
 
           {lease.notes ? (
             <Card title="Notes">
