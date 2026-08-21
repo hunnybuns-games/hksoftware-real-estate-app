@@ -20,7 +20,8 @@ type LimiterName =
   | "LOGIN_RATE_LIMIT"
   | "SIGNUP_RATE_LIMIT"
   | "PASSWORD_RESET_RATE_LIMIT"
-  | "APPLICATION_RATE_LIMIT";
+  | "APPLICATION_RATE_LIMIT"
+  | "SCREENING_CONSENT_RATE_LIMIT";
 
 /**
  * The limiter binding, or null when there isn't one — local `next dev` has no
@@ -118,4 +119,14 @@ export async function passwordResetAttemptAllowed(email: string): Promise<boolea
 export async function applicationAttemptAllowed(): Promise<boolean> {
   const ip = await clientIp();
   return allowed("APPLICATION_RATE_LIMIT", [ip ? `application:ip:${ip}` : null]);
+}
+
+/**
+ * Responses to a screening consent link. Keyed by IP only — like
+ * applications, there's no existing account to key on, and the token in the
+ * URL already scopes each request to one applicant's one screening request.
+ */
+export async function screeningConsentAttemptAllowed(): Promise<boolean> {
+  const ip = await clientIp();
+  return allowed("SCREENING_CONSENT_RATE_LIMIT", [ip ? `screening-consent:ip:${ip}` : null]);
 }

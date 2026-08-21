@@ -7,10 +7,12 @@ import type {
   ListingStatus,
   ListingSyndicationStatus,
   PaymentSource,
+  ScreeningStatus,
 } from "@prisma/client";
 import { applicationStatusLabel, applicationStatusTone } from "@/lib/applications";
 import { leaseDocumentStatusLabel, leaseDocumentStatusTone } from "@/lib/lease-document";
 import { listingStatusLabel, listingStatusTone, syndicationStatusLabel, syndicationStatusTone } from "@/lib/listing";
+import { screeningStatusLabel, screeningStatusTone } from "@/lib/screening";
 
 export function PageHeader({
   title,
@@ -303,6 +305,11 @@ export function ListingStatusBadge({ status }: { status: ListingStatus }) {
 
 export function SyndicationStatusBadge({ status }: { status: ListingSyndicationStatus }) {
   return <Badge tone={syndicationStatusTone(status)}>{syndicationStatusLabel(status)}</Badge>;
+}
+
+/** Labels/tones come from src/lib/screening.ts — the framework-free source of truth. */
+export function ScreeningStatusBadge({ status }: { status: ScreeningStatus }) {
+  return <Badge tone={screeningStatusTone(status)}>{screeningStatusLabel(status)}</Badge>;
 }
 
 /**

@@ -98,22 +98,27 @@ working code.
 - **Apply for Plaid + Stripe production access** — *Business*. Both are a
   real review process on their end — needs the legal pages from Phase 1 in
   place first, plus the actual application fee set once pricing is decided.
-- **FCRA consent flow, if screening ships** — *Decide*. Pulling a credit or
-  background report requires a "permissible purpose" under the Fair Credit
-  Reporting Act. The landlord org, not ComfyLease, has to be the one
-  accepting those terms — worth deciding the shape of that before Phase 3's
-  screening item gets built.
+- **FCRA consent flow** — *Build, done* — see `docs/tenant-screening.md` and
+  Phase 3's tenant-screening item below. Built ahead of the provider
+  integration it was blocking, since the consent step is independent of
+  which provider eventually runs the report.
 
 ## 3. Closing the gap on Innago
 
 Feature parity with the competitor a prospective landlord is comparing this
 against.
 
-- **Tenant screening — credit, background, eviction** — *Build*. The single
-  biggest thing missing versus Innago: applications can be reviewed today but
-  not screened. Plugs directly into the existing `Application` review flow
-  once a provider (Certn, Checkr, SmartMove) and the FCRA consent piece are
-  settled.
+- **Tenant screening — credit, background, eviction** — *Build, framework
+  done* — see `docs/tenant-screening.md`. An application's detail page can
+  now request screening, which emails the applicant a real FCRA consent
+  disclosure and records their response with an audit trail; once they
+  consent, staff record whatever came back from wherever they actually ran
+  the report. What's left is *Business*: pick a real provider (Certn,
+  Checkr, SmartMove) and build the API integration that pulls a report
+  automatically instead of a staff member running it by hand and typing in
+  the result — and *Decide/Business*: get the disclosure text reviewed by a
+  lawyer for the states this is actually used in before it goes in front of
+  a real applicant, same review dependency as Phase 1's Terms/Privacy Policy.
 - **Real listing syndication** — *Business*. Zillow, Realtor.com, Zumper, and
   Apartments.com each require their own listing-software partner
   application — a real business relationship, not an API key (see

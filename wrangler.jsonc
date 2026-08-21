@@ -99,6 +99,15 @@
       "name": "APPLICATION_RATE_LIMIT",
       "namespace_id": "1004",
       "simple": { "limit": 5, "period": 60 }
+    },
+    {
+      // The FCRA consent page at /screening/[token] — no login, reached by a
+      // link in an email, same public-endpoint reasoning as APPLICATION_RATE_LIMIT
+      // above. Keyed by IP only; the token itself already scopes each request to
+      // one applicant's one screening request (see src/actions/screening.ts).
+      "name": "SCREENING_CONSENT_RATE_LIMIT",
+      "namespace_id": "1005",
+      "simple": { "limit": 5, "period": 60 }
     }
   ],
   /**

@@ -699,8 +699,14 @@ layout's `generateMetadata()` is a function for the same reason.
   maintenance request is a note to staff, not a notification to the vendor — no vendor
   login, no scheduling, no cost tracking tied to a request or vendor record. The framework
   a fuller build sits on top of, not the fuller build.
-- **No legal pages.** No Terms of Service, no Privacy Policy — both are also prerequisites
-  for Plaid and Stripe production access, so this blocks going live regardless.
+- **Legal pages are drafted, not reviewed or live.** `docs/legal/terms-of-service.md` and
+  `docs/legal/privacy-policy.md` exist but aren't linked from the app and haven't had a
+  lawyer's pass — both are also prerequisites for Plaid and Stripe production access, so
+  this blocks going live regardless. See Phase 1 of `docs/ROADMAP.md`.
+- **Tenant screening (`docs/tenant-screening.md`) is a consent-and-recording framework,
+  not a live credit-bureau/background-check integration.** The FCRA disclosure applicants
+  see is a template, not lawyer-reviewed, and staff run the actual report outside this
+  app and type in the outcome — no provider API is wired up yet.
 
 ## 14. Maintainer runbook
 

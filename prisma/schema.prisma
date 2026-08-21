@@ -136,6 +136,9 @@ enum NotificationType {
   APPLICATION_DECIDED
   LEASE_READY_TO_SIGN
   LEASE_SIGNED
+  SCREENING_REQUESTED
+  SCREENING_CONSENT_GIVEN
+  SCREENING_DECLINED
 }
 
 enum ApplicationStatus {
@@ -222,6 +225,7 @@ model Organization {
   listings            Listing[]
   listingConnections  ListingPlatformConnection[]
   vendors             Vendor[]
+  screeningRequests   ScreeningRequest[]
 }
 
 /**
@@ -288,6 +292,8 @@ model User {
   applicationsReviewed Application[]
   leaseDocumentsSent   LeaseDocument[]
   listingsCreated      Listing[]
+  screeningsRequested  ScreeningRequest[] @relation("ScreeningRequestedBy")
+  screeningsCompleted  ScreeningRequest[] @relation("ScreeningCompletedBy")
 
   @@index([organizationId])
 }
@@ -725,11 +731,84 @@ model Application {
   leaseId String? @unique
   lease   Lease?  @relation(fields: [leaseId], references: [id], onDelete: SetNull)
 
+  screeningRequests ScreeningRequest[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organizationId, status])
   @@index([unitId])
+}
+
+// ---------------------------------------------------------------------------
+// Tenant screening
+//
+// No real credit-bureau/background-check integration exists yet — see
+// docs/tenant-screening.md. What's here is the framework: a consent record
+// that gives an applicant a real choice before anything is pulled (the FCRA
+// "permissible purpose" a landlord needs), and a place for staff to record
+// what came back from whatever they ran outside this app (today, a
+// provider's own dashboard — Certn, Checkr, SmartMove, or a local one).
+// `provider` exists so a real API integration has somewhere to plug in later
+// without another migration.
+// ---------------------------------------------------------------------------
+
+enum ScreeningStatus {
+  AWAITING_CONSENT // staff requested it; waiting on the applicant
+  IN_PROGRESS // applicant consented; staff is running/awaiting the report
+  COMPLETED // results recorded
+  DECLINED // applicant declined consent
+  CANCELED // staff called it off before the applicant responded
+}
+
+model ScreeningRequest {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  applicationId  String
+  application    Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  wantCredit     Boolean @default(true)
+  wantBackground Boolean @default(true)
+  wantEviction   Boolean @default(true)
+
+  status ScreeningStatus @default(AWAITING_CONSENT)
+
+  // The applicant's own unlisted-token consent link — same pattern as
+  // Invitation.token, not the hashed single-use pattern PasswordResetToken
+  // uses, because this token doesn't grant account access, only a view of
+  // (and a response to) one consent request. See the page's robots
+  // directive in src/app/screening/[token]/layout.tsx.
+  consentToken      String     @unique
+  consentGivenAt    DateTime?
+  consentDeclinedAt DateTime?
+  // ESIGN-style audit trail — the same fields LeaseSignature already records,
+  // for the same reason: a "permissible purpose" needs to be demonstrable
+  // later, not just asserted. See docs/tenant-screening.md for how far that
+  // actually goes toward real FCRA compliance (not all the way).
+  consentIpAddress String?
+  consentUserAgent String?
+
+  provider String @default("manual")
+
+  // Recorded by staff once a report comes back from wherever it was actually
+  // run. reportUrl is deliberately just a link, not a file upload — see
+  // docs/tenant-screening.md's "What's deliberately not here".
+  resultSummary String?
+  reportUrl     String?
+  completedAt   DateTime?
+  completedById String?
+  completedBy   User?     @relation("ScreeningCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  requestedById String?
+  requestedBy   User?    @relation("ScreeningRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([applicationId])
 }
 
 // ---------------------------------------------------------------------------

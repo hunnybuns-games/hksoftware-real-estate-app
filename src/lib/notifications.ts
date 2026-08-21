@@ -298,3 +298,56 @@ Good news — your application for ${args.propertyName} — ${args.unitLabel} ha
 Thanks for applying for ${args.propertyName} — ${args.unitLabel}. ${args.orgName} has decided to go in a different direction for this unit. We appreciate your interest.`,
   });
 }
+
+/** To the applicant: the FCRA consent link. See docs/tenant-screening.md. */
+export function notifyScreeningRequested(args: {
+  to: Recipient;
+  organizationId: string;
+  orgName: string;
+  propertyName: string;
+  unitLabel: string;
+  consentToken: string;
+}) {
+  return sendEmailSafely({
+    to: args.to.email,
+    type: "SCREENING_REQUESTED",
+    organizationId: args.organizationId,
+    subject: `${args.orgName} needs your consent for a screening report`,
+    body: `Hi ${args.to.name},
+
+As part of reviewing your application for ${args.propertyName} — ${args.unitLabel}, ${args.orgName} would like to run a screening report. Before that happens, federal law requires we get your explicit consent — please review the disclosure and respond here:
+
+${appUrl(`/screening/${args.consentToken}`)}
+
+This is your choice. The page explains what's being requested and your rights either way.`,
+  });
+}
+
+/** To staff: the applicant responded. `given` distinguishes consent from a decline. */
+export function notifyScreeningConsentResponse(args: {
+  to: Recipient;
+  organizationId: string;
+  applicantName: string;
+  applicationId: string;
+  given: boolean;
+}) {
+  return sendEmailSafely({
+    to: args.to.email,
+    type: args.given ? "SCREENING_CONSENT_GIVEN" : "SCREENING_DECLINED",
+    organizationId: args.organizationId,
+    subject: args.given
+      ? `${args.applicantName} consented to screening`
+      : `${args.applicantName} declined the screening request`,
+    body: args.given
+      ? `Hi ${args.to.name},
+
+${args.applicantName} consented to the screening report you requested. You can now run it and record the results:
+
+${appUrl(`/app/applications/${args.applicationId}`)}`
+      : `Hi ${args.to.name},
+
+${args.applicantName} declined to consent to the screening report you requested. Their application is still open for review — see:
+
+${appUrl(`/app/applications/${args.applicationId}`)}`,
+  });
+}
