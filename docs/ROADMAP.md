@@ -48,12 +48,19 @@ between "the app works" and "a stranger's rent money is safe here."
   email, real SEO, and zone-level Cloudflare protections (WAF, bot
   protection, rate-limiting rules). Blocks → outbound email, Plaid/screening
   production access, search visibility.
-- **Terms of Service + Privacy Policy** — *Business*. Don't exist yet.
-  Required before Plaid or Stripe will approve production access, and before
-  a paying landlord should be handing over tenant SSNs and bank data. A
-  drafted starting point isn't a substitute for a lawyer actually signing
-  off, given what this app touches. Blocks → Plaid production, Stripe
-  production, tenant screening.
+- **Terms of Service + Privacy Policy** — *Business*. A first draft of the
+  Terms exists at `docs/legal/terms-of-service.md` — not reviewed, not live
+  anywhere in the app, and blocked on the entity in the next item. Privacy
+  Policy still doesn't exist. Required before Plaid or Stripe will approve
+  production access, and before a paying landlord should be handing over
+  tenant SSNs and bank data. A drafted starting point isn't a substitute for
+  a lawyer actually signing off, given what this app touches. Blocks →
+  Plaid production, Stripe production, tenant screening.
+- **Form the business entity** — *Business*. The Terms draft names
+  `[COMPANY NAME]` as the counterparty because there isn't one yet.
+  Operating a rent-collection service as an individual with no entity in
+  between means personal liability directly, with nothing in between —
+  worth resolving alongside the Terms, not after.
 - **Error tracking + uptime monitoring** — *Build*. Today errors go to
   Workers logs and vanish (see MAINTAINER.md §13). Our own docs call this the
   most likely way the app quietly hurts someone — rent stops recording and
