@@ -20,9 +20,10 @@
 >    rewriting. Property management touches tenant screening law, security
 >    deposit law, and money transmission at the state level — all three vary
 >    by state and none of them are things to get wrong.
-> 3. Pair it with a real Privacy Policy (`docs/ROADMAP.md` has this as a
->    companion item) — Plaid and Stripe both require one before production
->    access, and this Terms draft assumes one exists and links to it.
+> 3. A first draft of the companion Privacy Policy now exists at
+>    `docs/legal/privacy-policy.md` — Plaid and Stripe both require one
+>    before production access, and this Terms draft assumes it exists and
+>    links to it.
 > 4. Wire acceptance into the signup flow — a checkbox, a stored timestamp +
 >    version, and footer links. Nothing in the app today records that anyone
 >    agreed to anything. See the implementation note at the bottom of this
@@ -243,7 +244,7 @@ non-exclusive, worldwide license to host, store, process, and display Your
 Content solely to operate and provide the Service to you and to those you've
 given access to it (e.g. a tenant seeing their own lease). We don't use Your
 Content to train models or share it outside your organization except as
-this section or our Privacy Policy describes.
+this section or our [Privacy Policy](./privacy-policy.md) describes.
 
 You're responsible for having the right to upload what you upload, and for
 it not violating anyone else's rights or applicable law. Don't submit
@@ -368,7 +369,7 @@ face a class action, and needs your lawyer's input, not a default.]
 
 If any part of these Terms is found unenforceable, the rest remains in
 effect, construed to reflect the parties' original intent as closely as
-possible. These Terms, together with the Privacy Policy and any
+possible. These Terms, together with the [Privacy Policy](./privacy-policy.md) and any
 service-specific terms (Stripe's, Plaid's), are the entire agreement
 between you and ComfyLease regarding the Service. You may not assign these
 Terms without our consent; we may assign them in connection with a merger,
