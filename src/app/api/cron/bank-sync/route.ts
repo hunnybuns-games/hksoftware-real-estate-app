@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { plaidEnabled } from "@/lib/plaid";
 import { syncBankConnection } from "@/lib/plaid-sync";
+import { reportServerError } from "@/lib/error-reporting";
 
 /**
  * Nightly catch-up for connected bank feeds. Two jobs:
@@ -73,6 +74,7 @@ export async function GET(req: Request): Promise<Response> {
       // One organization's broken connection must not stop everyone else's
       // sync. Record it and carry on.
       console.error(`[cron:bank-sync] ${connection.id} failed`, err);
+      await reportServerError(`cron:bank-sync:${connection.id}`, err);
       results.push({
         bankConnectionId: connection.id,
         organizationId: connection.organizationId,

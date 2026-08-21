@@ -25,6 +25,12 @@ import type { NotificationType } from "@prisma/client";
  *
  * Every send is recorded whichever mode is active, which doubles as the audit
  * trail a landlord needs when a tenant claims they never got a rent notice.
+ *
+ * `configuredFrom`/`emailBinding`/`sendViaCloudflare`/`sendViaResend`/
+ * `htmlShell` are exported for src/lib/error-reporting.ts, which needs the
+ * same transport but deliberately bypasses `sendEmail()`'s dedupe-check-then-
+ * record round trip through the database — an alert about the database being
+ * unreachable can't itself depend on the database being reachable.
  */
 
 export type SendEmailInput = {
@@ -69,7 +75,7 @@ export function bodyForLog(body: string, sensitive: boolean | undefined): string
  */
 const PLACEHOLDER_FROM = "notifications@example.com";
 
-function configuredFrom(): string | null {
+export function configuredFrom(): string | null {
   const from = process.env.EMAIL_FROM?.trim();
   if (!from || from === PLACEHOLDER_FROM) return null;
   return from;
@@ -122,7 +128,7 @@ export function describeEmailError(err: unknown): string {
  * binding in src/lib/db.ts, for the same reason: bindings only resolve inside an
  * active request on Workers.
  */
-async function emailBinding(): Promise<SendEmail | null> {
+export async function emailBinding(): Promise<SendEmail | null> {
   if (process.env.USE_D1 !== "true") return null; // not running on Workers
   try {
     const { getCloudflareContext } = await import("@opennextjs/cloudflare");
@@ -132,7 +138,7 @@ async function emailBinding(): Promise<SendEmail | null> {
   }
 }
 
-function htmlShell(subject: string, body: string): string {
+export function htmlShell(subject: string, body: string): string {
   const paragraphs = body
     .trim()
     .split(/\n{2,}/)
@@ -156,7 +162,7 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-type SendOutcome = { status: "SENT" | "LOGGED" } | { status: "FAILED"; error: string };
+export type SendOutcome = { status: "SENT" | "LOGGED" } | { status: "FAILED"; error: string };
 
 /**
  * Cloudflare Email Service. No MIME construction and no `mimetext` dependency —
@@ -164,10 +170,10 @@ type SendOutcome = { status: "SENT" | "LOGGED" } | { status: "FAILED"; error: st
  * `EmailMessage` + raw-RFC-5322 API still exists; there's no reason to use it
  * for mail we compose ourselves.)
  */
-async function sendViaCloudflare(
+export async function sendViaCloudflare(
   binding: SendEmail,
   from: string,
-  input: SendEmailInput,
+  input: Pick<SendEmailInput, "to" | "subject" | "body">,
 ): Promise<SendOutcome> {
   try {
     await binding.send({
@@ -184,10 +190,10 @@ async function sendViaCloudflare(
 }
 
 /** Resend's HTTP API directly — no SDK, so nothing to bundle into the isolate. */
-async function sendViaResend(
+export async function sendViaResend(
   apiKey: string,
   from: string,
-  input: SendEmailInput,
+  input: Pick<SendEmailInput, "to" | "subject" | "body">,
 ): Promise<SendOutcome> {
   try {
     const res = await fetch("https://api.resend.com/emails", {

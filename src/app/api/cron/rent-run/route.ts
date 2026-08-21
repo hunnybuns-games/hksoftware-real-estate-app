@@ -3,6 +3,7 @@ import { isCronAuthorized } from "@/lib/cron-auth";
 import { computeBalance, generateRentCharges } from "@/lib/ledger";
 import { notifyRentDue, notifyRentLate } from "@/lib/notifications";
 import { daysBetweenUtc, startOfUtcDay } from "@/lib/dates";
+import { reportServerError } from "@/lib/error-reporting";
 
 /**
  * Nightly rent run: post this month's rent charges, then send due/late notices.
@@ -37,79 +38,102 @@ export async function GET(req: Request): Promise<Response> {
     chargesCreated: number;
     remindersSent: number;
     lateNoticesSent: number;
+    error?: string;
   }[] = [];
 
+  // One organization's bad data (a malformed lease, a DB hiccup mid-loop)
+  // must not take down every other organization's rent run — same isolation
+  // bank-sync already has per connection. Record and move on.
   for (const org of organizations) {
-    const { created } = await generateRentCharges({ organizationId: org.id, asOf: today });
-
-    let remindersSent = 0;
-    let lateNoticesSent = 0;
-
-    const leases = await db.lease.findMany({
-      where: { organizationId: org.id, status: "ACTIVE" },
-      include: {
-        charges: { where: { voidedAt: null } },
-        payments: { select: { amountCents: true, status: true } },
-        tenant: { select: { firstName: true, email: true } },
-        unit: { select: { label: true, property: { select: { name: true } } } },
-      },
-    });
-
-    for (const lease of leases) {
-      const balance = computeBalance({
-        charges: lease.charges,
-        payments: lease.payments,
-        graceDays: org.graceDays,
-        asOf: today,
-      });
-
-      if (balance.balanceCents <= 0 || !balance.oldestUnpaidDueDate) continue;
-
-      const daysUntilDue = daysBetweenUtc(today, balance.oldestUnpaidDueDate);
-      const dueKey = balance.oldestUnpaidDueDate.toISOString().slice(0, 10);
-
-      if (daysUntilDue >= 0 && daysUntilDue <= REMINDER_LEAD_DAYS) {
-        await notifyRentDue({
-          to: { email: lease.tenant.email, name: lease.tenant.firstName },
-          organizationId: org.id,
-          orgName: org.name,
-          amountCents: balance.balanceCents,
-          dueDate: balance.oldestUnpaidDueDate,
-          unitLabel: lease.unit.label,
-          propertyName: lease.unit.property.name,
-          dedupeKey: `rent-due:${lease.id}:${dueKey}`,
-        });
-        remindersSent += 1;
-        continue;
-      }
-
-      // Chase on the day the grace period lapses, then weekly — enough to be
-      // useful, not enough to be harassment.
-      if (balance.isLate) {
-        const daysSinceGraceEnded = balance.daysPastDue - org.graceDays;
-        if (daysSinceGraceEnded === 0 || daysSinceGraceEnded % 7 === 0) {
-          await notifyRentLate({
-            to: { email: lease.tenant.email, name: lease.tenant.firstName },
-            organizationId: org.id,
-            orgName: org.name,
-            amountCents: balance.balanceCents,
-            dueDate: balance.oldestUnpaidDueDate,
-            daysLate: balance.daysPastDue,
-            dedupeKey: `rent-late:${lease.id}:${dueKey}:${balance.daysPastDue}`,
-          });
-          lateNoticesSent += 1;
-        }
-      }
+    try {
+      await runForOrganization(org, today, results);
+    } catch (err) {
+      console.error(`[cron:rent-run] ${org.id} failed`, err);
+      await reportServerError(`cron:rent-run:${org.id}`, err);
+      results.push({ organizationId: org.id, chargesCreated: 0, remindersSent: 0, lateNoticesSent: 0, error: err instanceof Error ? err.message : "unknown error" });
     }
-
-    results.push({
-      organizationId: org.id,
-      chargesCreated: created,
-      remindersSent,
-      lateNoticesSent,
-    });
   }
 
   return Response.json({ ranAt: today.toISOString(), organizations: results.length, results });
 }
 
+async function runForOrganization(
+  org: { id: string; name: string; graceDays: number },
+  today: Date,
+  results: {
+    organizationId: string;
+    chargesCreated: number;
+    remindersSent: number;
+    lateNoticesSent: number;
+    error?: string;
+  }[],
+): Promise<void> {
+  const { created } = await generateRentCharges({ organizationId: org.id, asOf: today });
+
+  let remindersSent = 0;
+  let lateNoticesSent = 0;
+
+  const leases = await db.lease.findMany({
+    where: { organizationId: org.id, status: "ACTIVE" },
+    include: {
+      charges: { where: { voidedAt: null } },
+      payments: { select: { amountCents: true, status: true } },
+      tenant: { select: { firstName: true, email: true } },
+      unit: { select: { label: true, property: { select: { name: true } } } },
+    },
+  });
+
+  for (const lease of leases) {
+    const balance = computeBalance({
+      charges: lease.charges,
+      payments: lease.payments,
+      graceDays: org.graceDays,
+      asOf: today,
+    });
+
+    if (balance.balanceCents <= 0 || !balance.oldestUnpaidDueDate) continue;
+
+    const daysUntilDue = daysBetweenUtc(today, balance.oldestUnpaidDueDate);
+    const dueKey = balance.oldestUnpaidDueDate.toISOString().slice(0, 10);
+
+    if (daysUntilDue >= 0 && daysUntilDue <= REMINDER_LEAD_DAYS) {
+      await notifyRentDue({
+        to: { email: lease.tenant.email, name: lease.tenant.firstName },
+        organizationId: org.id,
+        orgName: org.name,
+        amountCents: balance.balanceCents,
+        dueDate: balance.oldestUnpaidDueDate,
+        unitLabel: lease.unit.label,
+        propertyName: lease.unit.property.name,
+        dedupeKey: `rent-due:${lease.id}:${dueKey}`,
+      });
+      remindersSent += 1;
+      continue;
+    }
+
+    // Chase on the day the grace period lapses, then weekly — enough to be
+    // useful, not enough to be harassment.
+    if (balance.isLate) {
+      const daysSinceGraceEnded = balance.daysPastDue - org.graceDays;
+      if (daysSinceGraceEnded === 0 || daysSinceGraceEnded % 7 === 0) {
+        await notifyRentLate({
+          to: { email: lease.tenant.email, name: lease.tenant.firstName },
+          organizationId: org.id,
+          orgName: org.name,
+          amountCents: balance.balanceCents,
+          dueDate: balance.oldestUnpaidDueDate,
+          daysLate: balance.daysPastDue,
+          dedupeKey: `rent-late:${lease.id}:${dueKey}:${balance.daysPastDue}`,
+        });
+        lateNoticesSent += 1;
+      }
+    }
+  }
+
+  results.push({
+    organizationId: org.id,
+    chargesCreated: created,
+    remindersSent,
+    lateNoticesSent,
+  });
+}

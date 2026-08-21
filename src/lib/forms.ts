@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AuthorizationError, NotFoundError } from "@/lib/rbac";
+import { reportServerError } from "@/lib/error-reporting";
 
 /**
  * Every server action in this app returns the same shape, so every form can use
@@ -60,7 +61,12 @@ export async function runAction(fn: () => Promise<ActionState>): Promise<ActionS
     if (isRedirectError(err)) throw err;
     if (err instanceof AuthorizationError) return actionError(err.message);
     if (err instanceof NotFoundError) return actionError(err.message);
-    console.error("[action] unhandled failure", err);
+    // Awaited, not fire-and-forget: a Server Action's Worker isolate can be
+    // torn down as soon as the response is sent, and there's no ctx.waitUntil
+    // reachable from here to keep it alive otherwise. reportServerError's own
+    // console.error runs first regardless of whether the alert email that
+    // follows succeeds, is skipped (unconfigured), or fails.
+    await reportServerError("action", err);
     return actionError("Something went wrong on our end. Please try again.");
   }
 }

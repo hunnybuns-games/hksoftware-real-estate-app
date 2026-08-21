@@ -9,6 +9,11 @@
 // this file only exists for the cron trigger, which OpenNext doesn't
 // generate on its own.
 import openNextWorker from "../../.open-next/worker.js";
+// Relative, not the "@/..." alias the rest of the app uses — this file is
+// bundled by Wrangler directly (it's wrangler.jsonc's "main"), not by
+// Next's own bundler, and staying relative here avoids depending on
+// Wrangler's tsconfig-paths resolution actually being on for this one file.
+import { reportServerError } from "../lib/error-reporting";
 
 export default {
   fetch: openNextWorker.fetch,
@@ -32,10 +37,13 @@ export default {
         });
         const response = await openNextWorker.fetch(request, env, ctx);
         if (!response.ok) {
-          console.error(`Cron ${path} failed: ${response.status} ${await response.text()}`);
+          const body = await response.text();
+          console.error(`Cron ${path} failed: ${response.status} ${body}`);
+          await reportServerError(`cron:scheduled:${path}`, new Error(`${response.status} ${body}`));
         }
       } catch (err) {
         console.error(`Cron ${path} threw`, err);
+        await reportServerError(`cron:scheduled:${path}`, err);
       }
     }
   },

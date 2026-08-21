@@ -62,11 +62,23 @@ between "the app works" and "a stranger's rent money is safe here."
   Operating a rent-collection service as an individual with no entity in
   between means personal liability directly, with nothing in between —
   worth resolving alongside the Terms, not after.
-- **Error tracking + uptime monitoring** — *Build*. Today errors go to
-  Workers logs and vanish (see MAINTAINER.md §13). Our own docs call this the
-  most likely way the app quietly hurts someone — rent stops recording and
-  nobody notices for weeks. Sentry (or similar) plus a dead-simple uptime
-  ping is the whole ask.
+- **Error tracking + uptime monitoring** — *Build, mostly done* — see
+  `docs/observability.md`. Cloudflare Workers Logs is on, unhandled Server
+  Action and cron failures alert by email if `ERROR_ALERT_EMAIL` is set,
+  client-side render crashes now reach the server the same way, and
+  `/api/health` exists for an external pinger. What's left is *Configure*:
+  set `ERROR_ALERT_EMAIL` and point a free uptime service (UptimeRobot or
+  similar) at `/api/health` — neither happens on its own. This work also
+  found the reason the nightly rent run has been failing — see the next
+  item, which was a real, live bug, not a hypothetical one this section
+  was written to guard against.
+- **Set `CRON_SECRET` in production** — *Configure*. Unset since launch —
+  `isCronAuthorized()` refuses every cron request without it, so the
+  nightly rent run and bank sync have been 401ing silently, every night, no
+  charges posted, no due/late notices sent. One command:
+  `npx wrangler secret put CRON_SECRET` (see `docs/MAINTAINER.md` §14 for
+  the full runbook entry). The single highest-value five minutes on this
+  whole list.
 - **Decide how ComfyLease actually makes money** — *Decide*. The Stripe
   application fee (`STRIPE_APPLICATION_FEE_BPS`) is 0% by default and there's
   no subscription or per-org billing at all — landlords use the app for free

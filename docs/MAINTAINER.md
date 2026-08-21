@@ -686,10 +686,12 @@ layout's `generateMetadata()` is a function for the same reason.
   nonce-based for scripts, which is where account takeover lives, but Next injects inline
   `<style>` with no nonce plumbing available. Injected CSS can restyle a page and read
   attribute values; it can't execute. Accepted, not overlooked.
-- **No error tracking or uptime monitoring.** Errors go to `console.error` — i.e. Workers
-  logs, unretained by default — and the reference number shown on the error page
-  corresponds to nothing lookup-able. A silently failing integration is the most likely way
-  this app hurts someone: rent quietly stops being recorded and nobody notices for weeks.
+- **Error tracking + uptime monitoring — mostly built, needs configuring.** See
+  `docs/observability.md`. Workers Logs is on and every unhandled Server Action,
+  cron, and client-render failure now goes through one alerting path
+  (`reportServerError`); `/api/health` exists for an uptime pinger. Neither
+  `ERROR_ALERT_EMAIL` nor an actual external monitor pointed at `/api/health`
+  is set up yet — the code doesn't do that part on its own.
 - **Maintenance photos are blobs in D1.** Up to 5 × 4 MB per request, against a 500 MB
   (free) or 10 GB (paid) per-database ceiling. Deliberate simplification for shipping; R2
   is the destination, and `canViewPhoto`'s authorization check carries over unchanged.
@@ -737,6 +739,30 @@ git push origin claude/property-management-mvp-gjlizb
 # Cloudflare Workers Builds picks it up automatically (watches this branch directly)
 # Build command: npm run cf:build · Deploy command: npx wrangler deploy
 ```
+
+### Set a missing secret (e.g. the CRON_SECRET bug)
+
+`CRON_SECRET` was unset in production as of this writing —
+`isCronAuthorized()` (`src/lib/cron-auth.ts`) refuses every request
+without one, which means the nightly rent run and bank sync
+(`src/worker/index.ts`'s `scheduled()` handler) have been 401ing, silently,
+every night: no charges posted, no due/late notices sent, nothing in any
+log anyone was watching. `docs/observability.md` covers how this was
+actually found and how it's caught going forward. The fix itself is one
+command:
+
+```
+openssl rand -base64 32                          # generate a value
+npx wrangler secret put CRON_SECRET              # paste it when prompted
+```
+
+Same pattern for any other secret in the list at the top of `wrangler.jsonc`
+(`AUTH_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`PLAID_CLIENT_ID`, `PLAID_SECRET`, `BANK_TOKEN_ENCRYPTION_KEY`) — generate
+or obtain the value, then `npx wrangler secret put <NAME>`. There's nothing
+that periodically checks these are set; a missing one fails whatever
+depends on it, the way this one did, so it's worth a manual pass down that
+list after reading this.
 
 ### Run migrations against production
 

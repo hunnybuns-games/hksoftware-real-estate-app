@@ -19,6 +19,15 @@
   "triggers": {
     "crons": ["0 13 * * *"]
   },
+  // Cloudflare Workers Logs — console.log/error from every request, kept and
+  // searchable in the dashboard (Workers & Pages -> this Worker -> Logs), no
+  // third-party account and nothing else to configure. This is what makes
+  // the console.error calls throughout src/lib/error-reporting.ts and the
+  // cron routes actually go somewhere instead of vanishing the moment the
+  // Worker's isolate is torn down — see docs/observability.md.
+  "observability": {
+    "enabled": true
+  },
   // Schema changes go through `npm run cf:migrate`, which runs
   // `wrangler d1 migrations apply` against the files in migrations/ — generated
   // from prisma/migrations by npm run cf:migrations:sync. Prisma is still what
@@ -170,5 +179,7 @@
   //
   // Non-secret vars you likely also want to add above once deployed:
   //   AUTH_URL, STRIPE_APPLICATION_FEE_BPS,
-  //   PLAID_ENV ("production" once you're off Sandbox — defaults to "sandbox")
+  //   PLAID_ENV ("production" once you're off Sandbox — defaults to "sandbox"),
+  //   ERROR_ALERT_EMAIL (see .env.example and docs/observability.md — where
+  //   server-error alert emails go; unset means log-only)
 }

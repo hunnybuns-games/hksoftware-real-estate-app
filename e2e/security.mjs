@@ -344,6 +344,37 @@ log(
 await cspCtx.close();
 await themeCtx.close();
 
+// --- Observability: /api/health and /api/report-error (docs/observability.md) ---
+const healthResp = await fetch(`${BASE}/api/health`);
+const healthBody = await healthResp.json().catch(() => null);
+log(
+  "/api/health is reachable with no auth and reports ok",
+  healthResp.status === 200 && healthBody?.status === "ok",
+  `status=${healthResp.status} body=${JSON.stringify(healthBody)}`,
+);
+
+const reportOkResp = await fetch(`${BASE}/api/report-error`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: "e2e synthetic client error", url: "/e2e-test" }),
+});
+log(
+  "/api/report-error accepts a well-formed client error report",
+  reportOkResp.status === 202,
+  `status=${reportOkResp.status}`,
+);
+
+const reportBadResp = await fetch(`${BASE}/api/report-error`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: "" }), // empty message fails the schema's min(1)
+});
+log(
+  "/api/report-error rejects a malformed body rather than silently accepting it",
+  reportBadResp.status === 400,
+  `status=${reportBadResp.status}`,
+);
+
 await browser.close();
 
 const passed = results.filter((r) => r.ok).length;
