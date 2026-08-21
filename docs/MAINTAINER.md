@@ -3,6 +3,9 @@
 A point-in-time reference for the current state of this repo — not auto-synced with
 future changes. If a section here drifts from the code, the code wins.
 
+Looking for what's left before this is production-ready, not how it works today?
+See `docs/ROADMAP.md`.
+
 ## Contents
 
 1. [What this app is](#1-what-this-app-is)
@@ -641,6 +644,9 @@ layout's `generateMetadata()` is a function for the same reason.
 - **No blog or content marketing surface.** That's a content decision, not a code one.
 
 ## 13. Known gaps & deliberate non-goals
+
+> For a prioritized, "who does what next" version of this section, see
+> `docs/ROADMAP.md`.
 
 - **No R2/KV cache bindings.** Next's cache falls back to in-isolate memory. Fine for
   this app's traffic; revisit only if ISR/full-route caching across isolates becomes
