@@ -13,7 +13,11 @@ import {
   runAction,
 } from "@/lib/forms";
 import { MAX_PHOTOS_PER_REQUEST } from "@/lib/constants";
-import { notifyMaintenanceCreated, notifyMaintenanceUpdated } from "@/lib/notifications";
+import {
+  notifyMaintenanceCreated,
+  notifyMaintenanceUpdated,
+  notifyVendorAssigned,
+} from "@/lib/notifications";
 import { readPhotos } from "@/lib/photos";
 import { auth } from "@/lib/auth";
 
@@ -278,15 +282,23 @@ export async function assignVendorAction(
 
     const request = await db.maintenanceRequest.findFirst({
       where: { id: requestId, organizationId: ctx.organizationId },
-      select: { id: true, assignedVendorId: true },
+      select: {
+        id: true,
+        assignedVendorId: true,
+        title: true,
+        description: true,
+        priority: true,
+        organization: { select: { name: true } },
+        unit: { select: { label: true, property: { select: { name: true } } } },
+      },
     });
     if (!request) return actionError("That request no longer exists.");
 
-    let vendor: { id: string; name: string } | null = null;
+    let vendor: { id: string; name: string; email: string | null } | null = null;
     if (parsed.data.vendorId) {
       vendor = await db.vendor.findFirst({
         where: { id: parsed.data.vendorId, organizationId: ctx.organizationId },
-        select: { id: true, name: true },
+        select: { id: true, name: true, email: true },
       });
       if (!vendor) {
         return actionError("Please fix the highlighted fields.", { vendorId: "Pick a vendor." });
@@ -312,6 +324,25 @@ export async function assignVendorAction(
         internal: true,
       },
     });
+
+    // The one vendor-facing notification this app sends — see
+    // notifyVendorAssigned's own comment for why there's no link back into
+    // the app. Silently skipped if the vendor has no email on file; staff
+    // still sees the assignment succeeded, they just need to call instead.
+    if (vendor?.email) {
+      await notifyVendorAssigned({
+        to: { email: vendor.email, name: vendor.name },
+        organizationId: ctx.organizationId,
+        orgName: request.organization.name,
+        assignedByName: ctx.name,
+        assignedByEmail: ctx.email,
+        requestTitle: request.title,
+        requestDescription: request.description,
+        priority: request.priority,
+        propertyName: request.unit.property.name,
+        unitLabel: request.unit.label,
+      });
+    }
 
     revalidatePath(`/app/maintenance/${requestId}`);
     revalidatePath("/app/maintenance");

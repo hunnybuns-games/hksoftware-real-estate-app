@@ -25,14 +25,16 @@ handling a given maintenance request. This is the framework piece — see
 
 ## What's deliberately not here
 
-- **No vendor-facing anything.** A vendor doesn't get a login, a portal, or
-  an automatic email when assigned. Assigning them in the app is a note to
-  yourself, not a notification — staff still calls or texts them directly.
-  This is the biggest gap between this and a tool like Innago, which can
-  push work orders straight to a vendor; closing it later means a
-  notification (`notifyVendorAssigned`, mirroring the maintenance-request
-  notifications already in `src/lib/notifications.ts`) plus, eventually,
-  vendor contact preferences.
+- **Still no login or portal — but assigning one now emails them.** A vendor
+  with an email on file gets a plain FYI (`notifyVendorAssigned`) with the
+  job details and who to contact back — no link into the app, since nothing
+  on the other end would let them in. That's still a note plus an email, not
+  a work-order system: no read receipt, no accept/decline, no status the
+  vendor can update themselves. A vendor with no email on file gets nothing;
+  staff still calls or texts them, same as before. Closing the rest of the
+  gap with a tool like Innago (a vendor accepting/declining, updating status,
+  seeing their own job list) is a real vendor-facing surface this app doesn't
+  have — a bigger build than one notification.
 - **No scheduling.** There's no appointment/date field, no calendar. "When"
   lives in the request's free-text notes for now, same as before vendors
   existed.

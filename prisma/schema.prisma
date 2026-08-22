@@ -139,6 +139,7 @@ enum NotificationType {
   SCREENING_REQUESTED
   SCREENING_CONSENT_GIVEN
   SCREENING_DECLINED
+  VENDOR_ASSIGNED
 }
 
 enum ApplicationStatus {

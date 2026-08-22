@@ -115,6 +115,14 @@ let applicationId;
 
   const link = await latestScreeningLink(page);
   check("the consent email records a usable link", Boolean(link));
+
+  await page.goto(`${BASE}/app/applications?filter=all`, { waitUntil: "domcontentloaded" });
+  const listRow = page.locator("tr", { hasText: "Skyler Chen" });
+  check(
+    "the applications list shows the screening status too, not just the detail page",
+    (await listRow.textContent())?.includes("Awaiting consent") ?? false,
+  );
+
   await ctx.close();
 
   if (link) {

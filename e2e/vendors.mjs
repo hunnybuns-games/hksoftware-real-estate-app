@@ -119,6 +119,13 @@ const vendorId = vendorEditUrl.match(/\/vendors\/([a-z0-9]+)\/edit/)?.[1];
 
   const requestUrl = page.url();
 
+  // A vendor with an email on file gets a plain FYI — no link into the app,
+  // since they have no login. See notifyVendorAssigned.
+  await page.goto(`${BASE}/app/settings/outbox`, { waitUntil: "networkidle" });
+  const outbox = await page.textContent("body");
+  check("assigning a vendor with an email on file emails them", outbox.includes("pat@e2e-plumbing.test"));
+  check("the vendor email names the job", /Dishwasher not draining/.test(outbox));
+
   await page.goto(`${BASE}/app/maintenance?filter=all`, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle").catch(() => {});
   const listBody = await page.textContent("body");

@@ -147,6 +147,46 @@ You can follow along at ${appUrl("/portal/maintenance")}
   });
 }
 
+/**
+ * The one vendor-facing notification this app sends — see docs/vendors.md
+ * for the boundary this sits right at. A vendor has no login and no portal,
+ * so unlike every other notify* function here, there's no link back into
+ * the app: nothing on the other end of it would let them in. This is a
+ * plain FYI with the job details and who assigned them, so a reply or a
+ * call back reaches an actual person — staff still owns the follow-up.
+ */
+export function notifyVendorAssigned(args: {
+  to: Recipient;
+  organizationId: string;
+  orgName: string;
+  assignedByName: string;
+  assignedByEmail: string;
+  requestTitle: string;
+  requestDescription: string;
+  priority: string;
+  propertyName: string;
+  unitLabel: string;
+}) {
+  return sendEmailSafely({
+    to: args.to.email,
+    type: "VENDOR_ASSIGNED",
+    organizationId: args.organizationId,
+    subject: `New job: ${args.requestTitle} — ${args.propertyName}`,
+    body: `Hi ${args.to.name},
+
+${args.assignedByName} at ${args.orgName} assigned you to a maintenance request:
+
+Property: ${args.propertyName}
+Unit: ${args.unitLabel}
+Priority: ${args.priority.toLowerCase()}
+
+${args.requestTitle}
+${args.requestDescription}
+
+Questions or scheduling — contact ${args.assignedByName} directly at ${args.assignedByEmail}.`,
+  });
+}
+
 export function notifyStaffInvite(args: {
   to: Recipient;
   organizationId: string;

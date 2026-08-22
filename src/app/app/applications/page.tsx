@@ -4,7 +4,14 @@ import type { ApplicationStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/rbac";
 import { formatDate } from "@/lib/dates";
-import { ApplicationStatusBadge, Card, EmptyState, PageHeader, Table } from "@/components/ui";
+import {
+  ApplicationStatusBadge,
+  Card,
+  EmptyState,
+  PageHeader,
+  ScreeningStatusBadge,
+  Table,
+} from "@/components/ui";
 
 export const metadata: Metadata = { title: "Applications" };
 
@@ -49,6 +56,11 @@ export default async function ApplicationsPage({
         desiredMoveInDate: true,
         createdAt: true,
         unit: { select: { label: true, property: { select: { name: true } } } },
+        screeningRequests: {
+          orderBy: { requestedAt: "desc" },
+          take: 1,
+          select: { status: true },
+        },
       },
     }),
     db.application.count({
@@ -102,6 +114,7 @@ export default async function ApplicationsPage({
                 <th className="th">Unit</th>
                 <th className="th">Desired move-in</th>
                 <th className="th">Status</th>
+                <th className="th">Screening</th>
                 <th className="th">Submitted</th>
               </tr>
             }
@@ -124,6 +137,13 @@ export default async function ApplicationsPage({
                 </td>
                 <td className="td">
                   <ApplicationStatusBadge status={a.status} />
+                </td>
+                <td className="td">
+                  {a.screeningRequests[0] ? (
+                    <ScreeningStatusBadge status={a.screeningRequests[0].status} />
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
                 </td>
                 <td className="td whitespace-nowrap text-slate-500">{formatDate(a.createdAt)}</td>
               </tr>

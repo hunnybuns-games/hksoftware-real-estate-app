@@ -67,9 +67,6 @@ carries its own regulatory weight this app has made no attempt to take on.
   screening reports are more sensitive than a maintenance photo, and
   storing them here before there's a real reason to is the wrong direction,
   not a missing convenience.
-- **No screening column on the applications list page.** The status only
-  shows on an application's own detail page. Worth adding once screening
-  sees real use and staff want to see it at a glance across a list.
 - **No re-notification / reminder if an applicant never responds to the
   consent link.** Staff can cancel and re-request, which re-sends the
   email, but nothing nudges automatically.
