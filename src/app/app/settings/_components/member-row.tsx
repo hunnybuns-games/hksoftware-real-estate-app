@@ -48,8 +48,17 @@ export function MemberRow({
       <td className="td">
         {canManage && !isSelf ? (
           /* Submits on change — a separate "save" button for one dropdown is
-             more friction than it's worth. */
-          <form action={roleFormAction}>
+             more friction than it's worth.
+
+             Keyed on the server-confirmed value: React 19 resets a form's
+             uncontrolled fields to their defaultValue once a Server Action
+             submission completes, which would otherwise snap this select
+             back to whatever it showed at first mount — not the role that
+             was just saved — even though the write itself succeeded (same
+             bug, same fix, as AssignVendorForm). Changing the key when
+             member.role changes forces a fresh mount with the new value as
+             its defaultValue instead of a reset to the old one. */
+          <form key={member.role} action={roleFormAction}>
             <select
               name="role"
               defaultValue={member.role}
@@ -85,7 +94,7 @@ function RemoveButton() {
     <button
       type="submit"
       disabled={pending}
-      className="text-xs font-medium text-slate-500 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
+      className="btn-text text-xs font-medium text-slate-500 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
     >
       {pending ? "Removing…" : "Remove"}
     </button>

@@ -137,10 +137,18 @@ against.
   application — a real business relationship, not an API key (see
   `docs/listings.md`). The manual tracker already in the app is the right
   interim shape; this item is pursuing those applications directly.
-- **Installable on a phone** — *Build*. A web-app manifest already exists;
-  worth an actual pass at "Add to Home Screen" install quality and
-  touch-target sizing before calling it mobile-ready, rather than assuming
-  responsive CSS is the same thing as a good phone experience.
+- **Installable on a phone — done for now** — *Build*. The manifest was
+  missing what Android's adaptive-icon system actually needs: a `maskable`
+  icon, plus concrete 192/512 raster sizes most PWA checklists check for
+  (`scripts/generate-manifest-icons.mjs`, sharing the same hand-rolled PNG
+  rasterizer `generate-apple-icon.mjs` already used). Also fixed the clearest
+  touch-target gap — five table-row actions (Remove, Void, Delete...) were
+  plain unpadded text, under any reasonable tap-target minimum; a shared
+  `.btn-text` utility widens the actual hit area without changing row height
+  or the visible text. Not audited: every last small control app-wide (a few
+  borderline-but-passing ones, like the theme-toggle segmented control, were
+  left alone deliberately rather than risk their compact look for a marginal
+  gain) — revisit if real phone usage turns up a specific miss-tap complaint.
 
 ## 4. Operational hardening
 

@@ -27,7 +27,7 @@ function VoidButton() {
     <button
       type="submit"
       disabled={pending}
-      className="text-xs font-medium text-slate-500 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
+      className="btn-text text-xs font-medium text-slate-500 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
     >
       {pending ? "Voiding…" : "Void"}
     </button>

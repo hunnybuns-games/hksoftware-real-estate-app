@@ -173,6 +173,20 @@
     font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60;
 }
 
+/*
+ * A handful of table-row actions (Remove, Void, Delete...) are plain small
+ * text, not a `.btn` — a full button would be too heavy for a table cell.
+ * But "small text" alone leaves a hit area that's exactly the glyphs' own
+ * box, well under any real touch-target minimum (WCAG 2.5.8 asks for at
+ * least 24×24 CSS px). Padding widens the actual clickable area; an equal
+ * negative margin cancels it back out so the table row's height and the
+ * text's visual position don't change at all — only what registers a tap
+ * around it does.
+ */
+@utility btn-text {
+  @apply inline-flex items-center px-2 py-2.5 -mx-2 -my-2.5;
+}
+
 @layer components {
   /*
    * Most of these need no `dark:` at all — they're built from the theme-aware

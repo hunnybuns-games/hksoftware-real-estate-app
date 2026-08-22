@@ -216,6 +216,29 @@ const browser = await launchBrowser();
     /Dana Whitfield/.test(team) && /Marcus Lee/.test(team) && /Owner access/.test(team));
   await page.screenshot({ path: `${SHOTS}/09-team.png`, fullPage: true });
 
+  // Changing a member's role submits on change, no separate save button — the
+  // dropdown must show the new role immediately, not just after a reload.
+  // (Regression check: React 19 resets an uncontrolled form field to its
+  // defaultValue once a Server Action completes, which without a re-mount
+  // keyed on the server-confirmed value snaps this select back to whatever
+  // it showed at first page load instead — the save itself still worked, only
+  // the UI lied about it. See MemberRow's key={member.role}.)
+  //
+  // Marcus Lee is staff@example.com, which other suites (e2e:listings'
+  // admin-vs-staff checks) log in as and expect to still be STAFF — so this
+  // toggles back to STAFF before moving on, rather than leaving the promotion
+  // in place for whoever runs against this database next.
+  const marcusRoleSelect = page.locator("tr:has-text('Marcus Lee') select[name='role']");
+  await marcusRoleSelect.selectOption("ADMIN");
+  await page.waitForLoadState("networkidle");
+  log("promoting a member to Admin updates the dropdown without a reload",
+    (await marcusRoleSelect.inputValue()) === "ADMIN");
+
+  await marcusRoleSelect.selectOption("STAFF");
+  await page.waitForLoadState("networkidle");
+  log("demoting back to Staff also updates the dropdown without a reload",
+    (await marcusRoleSelect.inputValue()) === "STAFF");
+
   // Invite a staff member (email goes to the outbox in logged mode)
   await page.fill('input[name="name"]', "Riley Chen");
   await page.fill('input[name="email"]', "riley@example.com");
