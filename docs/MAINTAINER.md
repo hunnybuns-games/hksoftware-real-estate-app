@@ -588,36 +588,31 @@ The `/invite/[token]` and `/reset-password/[token]` pages get the strictest trea
 the token in the URL *is* a credential — the default `strict-origin-when-cross-origin`
 would put a working reset token in our own access logs on every asset request.
 
-### The domain move (in progress)
+### The domain move — done, but gated behind Access
 
-`comfylease.com` is registered at Namecheap. Until it is serving the app, this section's
-work is capped by the same thing that caps outbound email: `*.workers.dev` is a shared
-platform domain, and no amount of on-page work makes a subdomain of someone else's domain
-rank like your own.
+`comfylease.com` serves the app: the zone is on Cloudflare, `APP_URL` points at it,
+outbound email is onboarded (§8), and the canonical host is the **apex**, with `www`
+301ing to it via a Cloudflare Redirect Rule rather than application code. The steps that
+got it there (add the zone, move nameservers off Namecheap's, add the custom domain to
+the Worker, add the redirect rule) are done and not reproduced here.
 
-The canonical host is the **apex**, `comfylease.com`; `www` 301s to it via a Cloudflare
-Redirect Rule rather than application code, so only one host is ever indexable.
+**What's still deliberately in the way: `comfylease.com` is on the same Cloudflare Access
+application that protected the old `*.workers.dev` URL.** Access is bound per hostname, so
+adding the custom domain to it was a required step, not an accident — without it, finishing
+the domain move would have published the whole app to the open internet on day one. The
+practical effect right now is that nobody outside whoever's been let through Access can
+reach the site at all, which also means:
 
-Remaining steps, in order — the first two are the long pole because nameserver propagation
-is not instant:
+- **No real search visibility yet.** A crawler can't get past Access either, so none of
+  the indexing/exclusion work in this section actually matters until it comes down.
+- **Plaid's and Stripe's production-access review teams can't reach the site to verify it**
+  — both of Phase 1/2's applications in `docs/ROADMAP.md` are blocked on this, not just on
+  the legal pages.
 
-1. Add `comfylease.com` as a zone in the Cloudflare account that holds this Worker.
-2. At Namecheap, switch **Nameservers** from `Namecheap BasicDNS` to the two Cloudflare
-   nameservers the zone setup gives you. The existing Namecheap "Redirect Domain" rule
-   (apex → www) stops applying at that point, which is intended — it's replaced by the
-   Redirect Rule in step 5, pointing the other way.
-3. Workers → this Worker → Settings → Domains & Routes → add `comfylease.com` as a custom
-   domain.
-4. **Add `comfylease.com` to the existing Cloudflare Access application.** Access policies
-   are bound per hostname: the app protecting `*.workers.dev` does *not* cover a new
-   custom domain, so skipping this publishes the whole app.
-5. Add a Redirect Rule: `www.comfylease.com/*` → `https://comfylease.com/$1`, 301.
-6. Set `APP_URL` in `wrangler.jsonc` `vars` to `https://comfylease.com` — **only once the
-   domain actually serves the app.** It is not just cosmetic: it builds Stripe Connect's
-   return URLs and the webhook URL registered with Plaid, so pointing it at a host that
-   doesn't resolve breaks both.
-
-Then email becomes possible — see §8 and the transport notes in `src/lib/email.ts`.
+Taking Access down is a real decision, not a leftover config step — see "Put
+comfylease.com live" in `docs/ROADMAP.md`'s Phase 1 for what it should wait on (the legal
+pages actually being live, the entity existing, `CRON_SECRET` set — the last of which is
+now done).
 
 ### Why robots.txt and sitemap.xml are `force-dynamic`
 
@@ -656,13 +651,15 @@ layout's `generateMetadata()` is a function for the same reason.
   switch: no raw SQL, no Postgres-native column types), so moving to D1/SQLite didn't
   require re-verifying its correctness — only re-running the existing test suites, which
   passed unchanged.
-- **Custom domain registered but not yet serving.** `comfylease.com` is bought;
-  production still answers on the default `*.workers.dev` URL until the steps in §12a are
-  done. Three things are waiting on it: outbound email (Cloudflare Email Service can only
-  send from a domain you've onboarded — §8), search visibility (a shared platform
-  subdomain cannot rank like a domain you own — §12a), and zone-level Cloudflare features
-  (rate limiting rules, bot protection, WAF) which need a domain in your own account.
-  No code changes are needed beyond `APP_URL`.
+- **`comfylease.com` is live, but sitting behind a Cloudflare Access guard.** Not the
+  "still on `*.workers.dev`" state this note used to describe — the domain serves, and
+  outbound email through Cloudflare Email Service is onboarded and working (§8). What
+  Access being up means in practice: nobody outside whoever's been let through the guard
+  can actually reach the app, which is a deliberate hold, not a leftover config step. That
+  blocks search visibility (a crawler can't get past Access either) and would block Plaid's
+  and Stripe's production-access review teams from reaching the site to verify it, so it
+  has to come down before Phase 1/2 of `docs/ROADMAP.md` can finish — but taking it down
+  is its own decision (see that file's "Put comfylease.com live" item), not a code change.
 - **Stripe is optional**, by design, not an oversight — see §5 and `docs/payments.md`.
 - **Point-in-time restore takes the schema with it.** D1's Time Travel restores the whole
   database, structure included — so restoring to a bookmark from before a migration ran

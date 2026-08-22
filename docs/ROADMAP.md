@@ -31,23 +31,34 @@ hardening · full CI and e2e coverage.
 ## Start here
 
 Before anything below: confirm what's actually configured in **production**
-right now — Stripe live keys, Plaid production credentials, the email domain,
-the Mapbox token. Every one of these is optional by design (the app degrades
-to manual mode without them — see `.env.example`), which means it's entirely
-possible the live site is quietly running in fully-manual mode today without
-either of us having explicitly decided that. This has to be a five-minute
-audit before the plan below is more than a guess.
+right now — Stripe live keys, Plaid production credentials, the Mapbox
+token. Every one of these is optional by design (the app degrades to manual
+mode without them — see `.env.example`), which means it's entirely possible
+the live site is quietly running in fully-manual mode today without either
+of us having explicitly decided that. This has to be a five-minute audit
+before the plan below is more than a guess.
+
+(The domain question this used to include is answered: `comfylease.com` is
+live and serving — it's sitting behind a Cloudflare Access guard, which is
+its own deliberate gate, not an unfinished config step. See the first item
+in Phase 1.)
 
 ## 1. Blocking a real launch
 
 Nothing past this point matters if these aren't true — this is the gap
 between "the app works" and "a stranger's rent money is safe here."
 
-- **Put comfylease.com live** — *Configure*. Registered but not serving;
-  production still answers on the default `workers.dev` URL. Blocks outbound
-  email, real SEO, and zone-level Cloudflare protections (WAF, bot
-  protection, rate-limiting rules). Blocks → outbound email, Plaid/screening
-  production access, search visibility.
+- **Take the Cloudflare Access guard off comfylease.com** — *Decide*. The
+  domain itself is live and serving — that part's done, outbound email works,
+  `APP_URL` is correct. What's still up is the Access application that's
+  been protecting the app since before the domain move, now covering the
+  custom domain too instead of just `workers.dev`. Nobody outside whoever's
+  been let through it can reach the site at all right now, which blocks real
+  search visibility and — this is the one that actually matters for
+  sequencing — means Plaid's and Stripe's production-access review teams
+  can't reach the site to verify it either. Worth holding until the other
+  Phase 1 items below (legal pages live, entity formed) are actually true,
+  not dropping it just to unblock this one item.
 - **Terms of Service + Privacy Policy** — *Business*. First drafts of both
   now exist — `docs/legal/terms-of-service.md` and
   `docs/legal/privacy-policy.md` — not reviewed, not live anywhere in the
@@ -97,7 +108,9 @@ working code.
   connected and synced.
 - **Apply for Plaid + Stripe production access** — *Business*. Both are a
   real review process on their end — needs the legal pages from Phase 1 in
-  place first, plus the actual application fee set once pricing is decided.
+  place first, the actual application fee set once pricing is decided, and
+  the Access guard down (Phase 1) so their review teams can actually reach
+  the site.
 - **FCRA consent flow** — *Build, done* — see `docs/tenant-screening.md` and
   Phase 3's tenant-screening item below. Built ahead of the provider
   integration it was blocking, since the consent step is independent of
