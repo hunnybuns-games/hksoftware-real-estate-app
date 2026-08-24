@@ -71,6 +71,18 @@ this framework exists partly because of.
    opinion on which one, it just needs something outside Cloudflare doing
    the asking.
 
+   **Blocked as of 2026-08-23**: the Cloudflare Access guard on
+   comfylease.com (see `docs/ROADMAP.md`, Phase 1) currently covers
+   `/api/health` too — a plain `curl` gets a `302` to the Access login page,
+   not a `200`. An uptime monitor pointed at it today would either fail
+   permanently or, worse, read the login page's own status as "up" and never
+   catch a real outage. Two ways forward: carve out an Access policy
+   exception for `/api/health` specifically (bypass rules by path are a
+   normal Access pattern; needs the dashboard or an API token scoped for
+   Access, which the one this was checked with isn't), or just wait — the
+   guard is coming off anyway once Phase 1's legal/entity items land, and
+   this becomes moot at that point.
+
 ## A bug this work found along the way
 
 While wiring this up: `CRON_SECRET` is unset in production. `isCronAuthorized()`

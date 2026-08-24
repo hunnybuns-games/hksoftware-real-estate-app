@@ -218,14 +218,21 @@ export async function simulateDeposit(args: {
   accessToken: string;
   amountCents: number;
   description: string;
+  /**
+   * YYYY-MM-DD. Defaults to today — the only value the Sandbox tools panel
+   * ever sends. Backdating is for seeding multiple months of history (see
+   * prisma/seed-landlord10.ts) so a freshly connected Item can demonstrate a
+   * real, already-populated bank feed rather than starting empty.
+   */
+  date?: string;
 }): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10);
+  const date = args.date ?? new Date().toISOString().slice(0, 10);
   await getPlaid().sandboxTransactionsCreate({
     access_token: args.accessToken,
     transactions: [
       {
-        date_transacted: today,
-        date_posted: today,
+        date_transacted: date,
+        date_posted: date,
         // Plaid's sign convention is inverted from ours here too — see the
         // note on PlaidTransaction above. Negative means money IN.
         amount: -(args.amountCents / 100),

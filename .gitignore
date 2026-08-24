@@ -24,6 +24,10 @@ coverage/
 prisma/dev.db
 prisma/dev.db-journal
 
+# Remembers the landlord10 demo's live Stripe Connect account id across
+# reseeds — see the comment on SEED_STATE_FILE in seed-landlord10.ts.
+prisma/.landlord10-seed-state.json
+
 # Screenshots and scratch files the e2e suites write while running — debugging
 # aids for whoever is watching a failure, not fixtures anything asserts against.
 e2e/.artifacts/

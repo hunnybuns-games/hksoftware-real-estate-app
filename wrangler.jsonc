@@ -176,19 +176,35 @@
     // above for the exact limits. Fine for now: it's enough to test the whole
     // flow end to end against a verified inbox before opening it up to real
     // residents.
-    "EMAIL_FROM": "notifications@comfylease.com"
+    "EMAIL_FROM": "notifications@comfylease.com",
+
+    // Where server-error alert emails go — see reportServerError() in
+    // src/lib/error-reporting.ts and docs/observability.md. Unset means
+    // log-only (Workers Logs still gets everything either way). Subject to
+    // the same verified-destination-address gate as EMAIL_FROM above until
+    // the Paid plan clears it — if alerts don't land, check that this
+    // address is verified under Email → Email Routing → Destination
+    // addresses in the Cloudflare dashboard.
+    "ERROR_ALERT_EMAIL": "hunter.m.hays2@gmail.com"
   }
   // Secrets (set with `npx wrangler secret put <NAME>`, never in this file):
   //   AUTH_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, CRON_SECRET,
   //   PLAID_CLIENT_ID, PLAID_SECRET, BANK_TOKEN_ENCRYPTION_KEY
   //
-  // CRON_SECRET in particular is still unset as of this comment — the nightly
-  // rent run has been 401ing every night with no charges posted. Not an email
-  // problem, but it's sitting right next to one; see docs/MAINTAINER.md §14.
+  // As of 2026-08-23 (`wrangler secret list`), the ones actually set in
+  // production are: AUTH_SECRET, BANK_TOKEN_ENCRYPTION_KEY, CRON_SECRET,
+  // PLAID_CLIENT_ID, PLAID_SECRET. STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET
+  // are NOT set — Stripe rent collection is fully manual-mode in production
+  // right now, whether or not that's been explicitly decided (see
+  // docs/ROADMAP.md, "Decide how ComfyLease actually makes money"). Plaid's
+  // secrets exist but PLAID_ENV isn't set below, so production is still
+  // pointed at Plaid's Sandbox, not real banks — expected until Phase 2 of
+  // the roadmap (production access + one real bank verified), not a bug.
   //
-  // Non-secret vars you likely also want to add above once deployed:
-  //   AUTH_URL, STRIPE_APPLICATION_FEE_BPS,
-  //   PLAID_ENV ("production" once you're off Sandbox — defaults to "sandbox"),
-  //   ERROR_ALERT_EMAIL (see .env.example and docs/observability.md — where
-  //   server-error alert emails go; unset means log-only)
+  // ERROR_ALERT_EMAIL was added 2026-08-23 (see docs/observability.md).
+  //
+  // Still worth adding once decided/ready:
+  //   AUTH_URL, STRIPE_APPLICATION_FEE_BPS (blocked on a specific number —
+  //   the model is decided, ACH-only, see docs/ROADMAP.md),
+  //   PLAID_ENV ("production" once you're off Sandbox — defaults to "sandbox")
 }

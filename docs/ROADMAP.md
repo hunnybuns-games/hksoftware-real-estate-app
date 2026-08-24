@@ -38,6 +38,14 @@ the live site is quietly running in fully-manual mode today without either
 of us having explicitly decided that. This has to be a five-minute audit
 before the plan below is more than a guess.
 
+**Done, 2026-08-23** (`wrangler secret list` + reading `wrangler.jsonc`'s
+`vars`, see the comment there for the full readout): `CRON_SECRET` turned out
+to already be set — the item below is stale, the nightly rent run is not
+actually 401ing. `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` are unset, so
+rent collection is fully manual in production right now. Plaid's secrets are
+set but `PLAID_ENV` isn't, so production is still pointed at Sandbox, not a
+real bank. `ERROR_ALERT_EMAIL` is unset too — alerts are log-only.
+
 (The domain question this used to include is answered: `comfylease.com` is
 live and serving — it's sitting behind a Cloudflare Access guard, which is
 its own deliberate gate, not an unfinished config step. See the first item
@@ -58,7 +66,12 @@ between "the app works" and "a stranger's rent money is safe here."
   sequencing — means Plaid's and Stripe's production-access review teams
   can't reach the site to verify it either. Worth holding until the other
   Phase 1 items below (legal pages live, entity formed) are actually true,
-  not dropping it just to unblock this one item.
+  not dropping it just to unblock this one item. Also blocks something
+  smaller found 2026-08-23: it covers `/api/health` too, so no external
+  uptime monitor can actually use it right now (`302` to the Access login
+  page instead of `200` — see docs/observability.md's uptime section) — a
+  narrow path-based exception would unblock just that piece without dropping
+  the guard early, if that's wanted before the rest of Phase 1 is ready.
 - **Terms of Service + Privacy Policy** — *Business*. First drafts of both
   now exist — `docs/legal/terms-of-service.md` and
   `docs/legal/privacy-policy.md` — not reviewed, not live anywhere in the
@@ -83,19 +96,27 @@ between "the app works" and "a stranger's rent money is safe here."
   found the reason the nightly rent run has been failing — see the next
   item, which was a real, live bug, not a hypothetical one this section
   was written to guard against.
-- **Set `CRON_SECRET` in production** — *Configure*. Unset since launch —
-  `isCronAuthorized()` refuses every cron request without it, so the
-  nightly rent run and bank sync have been 401ing silently, every night, no
-  charges posted, no due/late notices sent. One command:
-  `npx wrangler secret put CRON_SECRET` (see `docs/MAINTAINER.md` §14 for
-  the full runbook entry). The single highest-value five minutes on this
-  whole list.
-- **Decide how ComfyLease actually makes money** — *Decide*. The Stripe
-  application fee (`STRIPE_APPLICATION_FEE_BPS`) is 0% by default and there's
-  no subscription or per-org billing at all — landlords use the app for free
-  today, however that got decided. Per-transaction fee on rent, flat monthly
-  per org, per-unit pricing — pick one before Phase 2 has a number to
-  configure.
+- ~~**Set `CRON_SECRET` in production**~~ — **Done.** Confirmed set via
+  `wrangler secret list` on 2026-08-23. The nightly rent run and bank sync
+  should be authorizing correctly; if due/late notices still aren't going
+  out, the cause is something else now — check Workers Logs, not this.
+- **Decide how ComfyLease actually makes money** — *Decide, model chosen
+  2026-08-23*. Landlords are free, no subscription or per-org billing — the
+  only revenue lever is a fee on ACH rent payments, via
+  `STRIPE_APPLICATION_FEE_BPS` (0 today, meaning no fee is actually charged
+  yet). Deliberately narrower than Innago, which also takes card fees,
+  application/screening fees, and other add-ons — ACH is the one line this
+  app charges. Two things still open: the actual rate, and a real gap this
+  decision exposed — `applicationFeeCents()` in `src/lib/stripe.ts` applies
+  the configured bps to *every* Checkout session regardless of which payment
+  method the tenant ends up choosing, not just ACH. Harmless today only
+  because `STRIPE_ALLOW_CARDS` is unset everywhere (so ACH is the only
+  method on offer) — the moment cards are enabled anywhere, this silently
+  starts taking a cut of card payments too, contradicting the decision above.
+  Needs fixing before `STRIPE_ALLOW_CARDS=true` is ever set: charge the fee
+  only when the settled PaymentIntent's payment method was `us_bank_account`,
+  which the webhook (the only place that knows what actually got used) can
+  check.
 
 ## 2. Financial & compliance readiness
 
