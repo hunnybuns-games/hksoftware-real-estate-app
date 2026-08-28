@@ -56,6 +56,27 @@
     }
   ],
   /**
+   * Private bucket behind the document vault (src/lib/document-storage.ts).
+   *
+   * Documents live here rather than as D1 blobs, unlike MaintenancePhoto and
+   * ListingPhoto which predate this binding — a scanned lease is an order of
+   * magnitude larger than a photo, and D1 has a hard per-database ceiling
+   * that storing PDFs in it would walk straight into. Moving those two
+   * existing blob columns here is the natural follow-up (docs/ROADMAP.md
+   * Phase 4 already tracks it); this binding is what makes that possible.
+   *
+   * No public access and no custom domain, deliberately: every read is
+   * authorized per-request through /api/documents/[documentId], the same rule
+   * /api/photos already follows. An unguessable object key is not an access
+   * control.
+   */
+  "r2_buckets": [
+    {
+      "binding": "DOCUMENTS",
+      "bucket_name": "comfylease-documents"
+    }
+  ],
+  /**
    * Rate limiting for the two unauthenticated endpoints that are worth abusing.
    * A security review confirmed eight rapid wrong-password attempts hit no
    * throttle at all: bcrypt's cost slows an attacker but there is no lockout and

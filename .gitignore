@@ -38,3 +38,8 @@ e2e/.artifacts/
 .e2e-reconciliation-run.mjs
 .e2e-reports-run.mjs
 .security-probe-run.mjs
+
+# Local-dev document storage. On Workers these live in the DOCUMENTS R2
+# bucket; `next dev` has no bindings, so src/lib/document-storage.ts writes
+# them here instead. Never committed.
+.local-documents/

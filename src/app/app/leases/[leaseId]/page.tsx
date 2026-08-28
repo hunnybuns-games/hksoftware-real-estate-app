@@ -32,6 +32,7 @@ import { RecordPaymentForm } from "./_components/record-payment-form";
 import { AddChargeForm } from "./_components/add-charge-form";
 import { VoidChargeButton } from "./_components/void-charge-button";
 import { InsuranceForm } from "./_components/insurance-form";
+import { DocumentsCard } from "@/components/documents-card";
 import { EndLeaseSection } from "./_components/end-lease-section";
 
 export async function generateMetadata({
@@ -386,6 +387,15 @@ export default async function LeaseDetailPage({
               ]}
             />
           </Card>
+
+          <DocumentsCard
+            organizationId={ctx.organizationId}
+            scope={{
+              kind: "lease",
+              id: lease.id,
+              label: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
+            }}
+          />
 
           <EndLeaseSection leaseId={lease.id} active={lease.status === "ACTIVE"} />
 

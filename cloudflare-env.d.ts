@@ -9,6 +9,7 @@ interface __BaseEnv_CloudflareEnv {
 	PASSWORD_RESET_RATE_LIMIT: RateLimit;
 	APPLICATION_RATE_LIMIT: RateLimit;
 	ASSETS: Fetcher;
+	DOCUMENTS: R2Bucket;
 	USE_D1: "true";
 	EMAIL_FROM: "notifications@comfylease.com";
 	DATABASE_URL: string;

@@ -17,6 +17,7 @@ import {
   Table,
   UnitStatusBadge,
 } from "@/components/ui";
+import { DocumentsCard } from "@/components/documents-card";
 import { Disclosure } from "@/components/disclosure";
 import { UnitForm } from "../_components/unit-form";
 import { ExpenseForm } from "./_components/expense-form";
@@ -313,6 +314,11 @@ export default async function PropertyDetailPage({
             </Table>
           )}
         </Card>
+
+        <DocumentsCard
+          organizationId={ctx.organizationId}
+          scope={{ kind: "property", id: property.id, label: property.name }}
+        />
 
         {property.notes ? (
           <Card title="Notes">

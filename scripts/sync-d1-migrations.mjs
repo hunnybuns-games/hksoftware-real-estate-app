@@ -85,14 +85,24 @@ for (const { folder, source, target } of migrations) {
   }
 
   const current = readFileSync(target, "utf8");
-  if (current === next) continue;
+
+  // Compared with line endings normalised, never raw. The header above is
+  // built with LF, but Git on Windows checks these files back out as CRLF
+  // (core.autocrlf), so a raw comparison reports every migration as edited on
+  // a Windows working copy while passing on Linux CI. That is a line-ending
+  // artefact, not drift - and left unfixed it drowns out the genuine
+  // "someone edited an already-applied migration" hazard this check exists
+  // to catch.
+  const normalise = (text) => text.replace(/\r\n/g, "\n");
+  if (normalise(current) === normalise(next)) continue;
 
   // A migration whose contents changed after it was synced is a hazard, not a
   // routine update: the old version may already be applied to production, and
   // Wrangler tracks migrations by name, so it will never re-run this one to
   // pick up the difference. Editing applied migrations is the mistake here —
   // add a new migration instead.
-  const bodyChanged = current.replace(/^--[^\n]*\n/gm, "") !== next.replace(/^--[^\n]*\n/gm, "");
+  const stripComments = (text) => normalise(text).replace(/^--[^\n]*\n/gm, "");
+  const bodyChanged = stripComments(current) !== stripComments(next);
   if (bodyChanged) {
     changed.push({ folder, was: digest(current), now: digest(next) });
   } else {

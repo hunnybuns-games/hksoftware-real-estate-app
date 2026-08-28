@@ -1,0 +1,50 @@
+-- CreateTable
+CREATE TABLE "Document" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "organizationId" TEXT NOT NULL,
+    "propertyId" TEXT,
+    "unitId" TEXT,
+    "tenantId" TEXT,
+    "leaseId" TEXT,
+    "category" TEXT NOT NULL DEFAULT 'OTHER',
+    "title" TEXT,
+    "notes" TEXT,
+    "filename" TEXT NOT NULL,
+    "contentType" TEXT NOT NULL,
+    "sizeBytes" INTEGER NOT NULL,
+    "storageKey" TEXT NOT NULL,
+    "contentHash" TEXT NOT NULL,
+    "uploadedById" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "Document_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "Document_propertyId_fkey" FOREIGN KEY ("propertyId") REFERENCES "Property" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Document_unitId_fkey" FOREIGN KEY ("unitId") REFERENCES "Unit" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Document_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Document_leaseId_fkey" FOREIGN KEY ("leaseId") REFERENCES "Lease" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Document_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Document_storageKey_key" ON "Document"("storageKey");
+
+-- CreateIndex
+CREATE INDEX "Document_organizationId_idx" ON "Document"("organizationId");
+
+-- CreateIndex
+CREATE INDEX "Document_organizationId_contentHash_idx" ON "Document"("organizationId", "contentHash");
+
+-- CreateIndex
+CREATE INDEX "Document_organizationId_category_idx" ON "Document"("organizationId", "category");
+
+-- CreateIndex
+CREATE INDEX "Document_propertyId_idx" ON "Document"("propertyId");
+
+-- CreateIndex
+CREATE INDEX "Document_unitId_idx" ON "Document"("unitId");
+
+-- CreateIndex
+CREATE INDEX "Document_tenantId_idx" ON "Document"("tenantId");
+
+-- CreateIndex
+CREATE INDEX "Document_leaseId_idx" ON "Document"("leaseId");
