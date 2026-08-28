@@ -127,7 +127,7 @@ export default async function DocumentsPage({
 
         {unfiled.length > 0 ? (
           <Card title="Needs filing" padded={false}>
-            <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+            <ul className="divide-y divide-slate-200">
               {unfiled.map((document) => (
                 <li key={document.id} className="space-y-3 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">

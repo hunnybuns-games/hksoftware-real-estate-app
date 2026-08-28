@@ -63,7 +63,7 @@ export async function DocumentsCard({
             description="Drop leases, inspections, receipts or photos below and they will be filed here."
           />
         ) : (
-          <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+          <ul className="divide-y divide-slate-200">
             {documents.map((document) => (
               <li key={document.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
                 <a

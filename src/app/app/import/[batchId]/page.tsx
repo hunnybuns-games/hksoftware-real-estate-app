@@ -167,7 +167,7 @@ export default async function ReviewImportPage({
                     </td>
                   ) : null}
                   <td className="td">
-                    <span className="font-medium text-slate-900 dark:text-slate-100">
+                    <span className="font-medium text-slate-900">
                       {row.propertyName || "—"}
                     </span>
                     <PlanBadge plan={plan.property} />
@@ -216,7 +216,7 @@ export default async function ReviewImportPage({
 
       {confirmed ? (
         <Card title="What next">
-          <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <p className="text-sm leading-relaxed text-slate-600">
             The leases are in but have no billing history yet. Open{" "}
             <Link href="/app/payments" className="link">
               Rent

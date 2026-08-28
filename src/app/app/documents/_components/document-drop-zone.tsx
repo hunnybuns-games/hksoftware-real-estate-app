@@ -98,10 +98,10 @@ export function DocumentDropZone({
               "rounded-xl border-2 border-dashed p-8 text-center transition-colors",
               dragging
                 ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30"
-                : "border-slate-300 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-900/30",
+                : "border-slate-300 bg-slate-50/50",
             ].join(" ")}
           >
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            <p className="text-sm font-medium text-slate-700">
               Drop files here
             </p>
             <p className="mt-1 text-sm text-slate-500">
@@ -137,13 +137,13 @@ export function DocumentDropZone({
 
           {files.length > 0 ? (
             <div className="space-y-3">
-              <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+              <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200">
                 {files.map((file) => (
                   <li
                     key={`${file.name}-${file.size}`}
                     className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
                   >
-                    <span className="truncate text-slate-700 dark:text-slate-200">{file.name}</span>
+                    <span className="truncate text-slate-700">{file.name}</span>
                     <span className="shrink-0 tabular-nums text-slate-400">
                       {formatSize(file.size)}
                     </span>

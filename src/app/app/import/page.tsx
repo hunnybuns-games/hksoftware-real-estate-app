@@ -35,7 +35,7 @@ export default async function ImportPage() {
 
       <div className="max-w-3xl space-y-6">
         <Card title="What this does">
-          <div className="space-y-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <div className="space-y-3 text-sm leading-relaxed text-slate-600">
             <p>
               Upload a rent roll — one row per occupied unit — and this creates the matching{" "}
               <strong>properties, units, tenants and leases</strong>. You will see exactly what it
