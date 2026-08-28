@@ -331,7 +331,16 @@ await section("theme toggle (Zoe)", async () => {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await login(page, "zoe.whitaker@example.com");
-  await page.goto(`${BASE}/portal`, { waitUntil: "domcontentloaded" });
+  // "load" rather than "domcontentloaded" — this is a "use client" toggle, so
+  // its onClick isn't wired up until React hydrates, which happens after
+  // domcontentloaded fires but before the page's "load" event. Racing the
+  // click against domcontentloaded (as an earlier version of this check did)
+  // means it can land on the button before the handler exists — every other
+  // click in this suite either follows a slower page.goto or gets a longer
+  // waitForTimeout first, which hides the same race; the main suite's
+  // equivalent check (e2e/theme.mjs) passes reliably specifically because it
+  // uses this default "load" wait.
+  await page.goto(`${BASE}/portal`, { waitUntil: "load" });
   const darkRadio = page.getByRole("radio", { name: "Dark" });
   if (await darkRadio.count()) {
     await darkRadio.click();
