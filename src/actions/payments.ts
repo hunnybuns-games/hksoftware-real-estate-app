@@ -17,6 +17,7 @@ import {
 import { generateRentCharges } from "@/lib/ledger";
 import { applyReconciliation, applyReconciliationForOrganization } from "@/lib/reconciliation";
 import { notifyRentReceived } from "@/lib/notifications";
+import { getStripe, stripeEnabled } from "@/lib/stripe";
 import { formatCents } from "@/lib/money";
 
 // STRIPE_NATIVE is deliberately excluded — that source is only ever set by
@@ -271,6 +272,127 @@ export async function updatePaymentStatusAction(
 
     revalidatePaymentViews(payment.leaseId);
     return actionOk("Payment updated.");
+  });
+}
+
+/**
+ * Cancels a payment a tenant started online but never finished.
+ *
+ * startRentPaymentAction writes a PENDING row *before* redirecting to Stripe,
+ * so an abandoned Checkout leaves a visible trace rather than a mystery (see
+ * the comment there). The cost is that closing the Stripe tab strands that row
+ * at PENDING: Stripe does eventually fire checkout.session.expired, but not for
+ * ~24 hours, and until then a landlord looking at the ledger sees "Awaiting
+ * payment" rows they can't do anything about. Three abandoned attempts in a row
+ * — easy to do on a slow bank login — look alarmingly like three unpaid bills.
+ *
+ * The delicate part is not the local row, it's the Stripe session behind it. A
+ * tenant can still have that Checkout tab open; marking the row dead here while
+ * leaving the session payable would mean money arriving against a payment
+ * staff believe they killed. So Stripe is asked what the session's actual state
+ * is, and that answer decides:
+ *
+ *   open     -> expire it at Stripe, then mark the row failed. The stale tab
+ *               stops working, which is the point.
+ *   expired  -> already dead; just mark the row failed.
+ *   complete -> refuse outright. The tenant did pay and the webhook simply
+ *               hasn't landed yet; cancelling would be a lie the webhook is
+ *               about to contradict.
+ *
+ * Reading `session.status` rather than pattern-matching the error text from a
+ * failed expire() call is deliberate: those three values are documented API
+ * surface, error strings are not, and getting this wrong in the `complete`
+ * direction loses a real payment.
+ */
+export async function cancelPendingOnlinePaymentAction(
+  paymentId: string,
+  _prev: ActionState,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const { organizationId } = await assertStaff();
+
+    const payment = await db.payment.findFirst({
+      where: { id: paymentId, organizationId },
+      select: {
+        id: true,
+        leaseId: true,
+        status: true,
+        stripeCheckoutSessionId: true,
+        stripePaymentIntentId: true,
+      },
+    });
+    if (!payment) return actionError("That payment no longer exists.");
+
+    if (payment.status !== "PENDING") {
+      return actionError(
+        "Only a payment that's still waiting to be paid can be canceled. Refresh to see where this one ended up.",
+      );
+    }
+    // A PaymentIntent id means Stripe has already taken the payment over, so
+    // the webhook owns this row's status from here — same rule as
+    // updatePaymentStatusAction above.
+    if (payment.stripePaymentIntentId) {
+      return actionError(
+        "This payment is already being processed by Stripe. Refresh in a moment to see whether it settled.",
+      );
+    }
+
+    if (payment.stripeCheckoutSessionId && stripeEnabled()) {
+      let sessionStatus: string | null;
+      try {
+        const session = await getStripe().checkout.sessions.retrieve(
+          payment.stripeCheckoutSessionId,
+        );
+        sessionStatus = session.status;
+      } catch (err) {
+        // Couldn't establish what Stripe thinks. Refusing is the conservative
+        // half of the choice above: a retry costs a click, cancelling a
+        // payment that turns out to have gone through costs real money.
+        console.error("[stripe] could not retrieve session before cancel", err);
+        return actionError(
+          "We couldn't reach Stripe to confirm this payment's status. Please try again in a moment.",
+        );
+      }
+
+      if (sessionStatus === "complete") {
+        return actionError(
+          "This payment went through on Stripe's side and is still settling. Refresh in a moment rather than canceling it.",
+        );
+      }
+
+      if (sessionStatus === "open") {
+        try {
+          await getStripe().checkout.sessions.expire(payment.stripeCheckoutSessionId);
+        } catch (err) {
+          // Losing this race is survivable: expire() only fails on a session
+          // that stopped being open, which either means it expired on its own
+          // (fine, the row is about to be marked failed anyway) or that the
+          // tenant completed it in the last instant — and that case the
+          // webhook will correct, since it is the one writer that outranks
+          // this action.
+          console.error("[stripe] could not expire checkout session", err);
+        }
+      }
+    }
+
+    await db.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "FAILED",
+        failedAt: new Date(),
+        failureMessage: "Canceled — this payment was never completed.",
+      },
+    });
+
+    // A PENDING payment never counted toward the balance (see CREDITING in
+    // src/lib/reconciliation.ts), so nothing about the money actually moves
+    // here. Reconciliation still runs so the payment's own row picks up a
+    // consistent status rather than keeping a stale one.
+    if (payment.leaseId) await applyReconciliation(payment.leaseId);
+
+    revalidatePaymentViews(payment.leaseId);
+    revalidatePath("/portal");
+    return actionOk("Payment canceled.");
   });
 }
 

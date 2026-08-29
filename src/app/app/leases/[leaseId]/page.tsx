@@ -6,7 +6,12 @@ import { requireStaff, staffOrganizationIdForMetadata } from "@/lib/rbac";
 import { getLeaseLedger } from "@/lib/ledger";
 import { getLeaseFormOptions } from "@/lib/lease-options";
 import { updateLeaseAction, updateLeaseInsuranceAction } from "@/actions/leases";
-import { addChargeAction, recordManualPaymentAction, voidChargeAction } from "@/actions/payments";
+import {
+  addChargeAction,
+  cancelPendingOnlinePaymentAction,
+  recordManualPaymentAction,
+  voidChargeAction,
+} from "@/actions/payments";
 import { centsToInputValue, formatCents } from "@/lib/money";
 import { formatDate, ordinalDay, relativeDays, toDateInputValue } from "@/lib/dates";
 import { getRentSplit } from "@/lib/rent-split";
@@ -31,6 +36,7 @@ import { LeaseForm } from "../_components/lease-form";
 import { RecordPaymentForm } from "./_components/record-payment-form";
 import { AddChargeForm } from "./_components/add-charge-form";
 import { VoidChargeButton } from "./_components/void-charge-button";
+import { CancelPaymentButton } from "./_components/cancel-payment-button";
 import { InsuranceForm } from "./_components/insurance-form";
 import { DocumentsCard } from "@/components/documents-card";
 import { EndLeaseSection } from "./_components/end-lease-section";
@@ -241,6 +247,7 @@ export default async function LeaseDetailPage({
                     <th className="th">Status</th>
                     <th className="th">Reconciliation</th>
                     <th className="th text-right">Amount</th>
+                    <th className="th"></th>
                   </tr>
                 }
               >
@@ -265,6 +272,16 @@ export default async function LeaseDetailPage({
                       <ReconciliationStatusBadge status={payment.reconciliationStatus} />
                     </td>
                     <td className="td text-right tabular-nums">{formatCents(payment.amountCents)}</td>
+                    <td className="td text-right">
+                      {/* Only a payment still waiting on the tenant can be
+                          canceled — anything Stripe has taken over belongs to
+                          the webhook. The action re-checks both. */}
+                      {payment.status === "PENDING" ? (
+                        <CancelPaymentButton
+                          action={cancelPendingOnlinePaymentAction.bind(null, payment.id)}
+                        />
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </Table>

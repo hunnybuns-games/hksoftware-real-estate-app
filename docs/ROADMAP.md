@@ -196,6 +196,39 @@ trade-offs (see MAINTAINER.md §13). Revisit before they become one.
   Login/signup/reset throttling fails open by design — a limiter outage must
   never become a login outage. Right for a small user base; worth a second
   look if abuse ever becomes a real pattern instead of a theoretical one.
+- **Put a gate in front of production** — *Configure, mostly yours* — see
+  `docs/environments.md` for the full writeup. Found 2026-08-29: there is
+  nothing between `git push` and `comfylease.com`. The repo's default branch
+  is also the working branch, Cloudflare Workers Builds deploys off it
+  directly, and CI *reports* rather than *blocks* — Cloudflare doesn't wait
+  for GitHub Actions, so a commit that fails CI still ships. A push touching
+  `migrations/` is additionally a schema change against the real database
+  (`d1.yml`'s push trigger). The fix needs no new infrastructure: bring
+  `main` current, point Workers Builds at it, and require passing CI to merge.
+  Two of those three steps are dashboard settings only you can do. Fine while
+  there are no customers; not fine once there are.
+- **Dependency-vulnerability hygiene** — *Build/Decide*. `npm audit`'s
+  findings had no owner and no process until 2026-08-29, when the
+  safely-fixable half was applied (`nanoid`, `undici`/`miniflare`/`wrangler`).
+  What's left is 6 high findings that all need a major-version bump to clear:
+  `postcss`/`sharp` (via `next`) and `deepmerge-ts` (via `prisma`). Assessed
+  rather than force-fixed — `sharp` is Next's image optimizer, which this app
+  deliberately never invokes (uploaded photos use a plain `<img>` against our
+  own authorized route, see the comment in the maintenance detail page), and
+  `postcss` runs at build time on our own CSS, not on anything a user
+  supplies. Neither is reachable by an attacker through this app today. Worth
+  clearing on the next routine `next`/`prisma` upgrade rather than a forced
+  bump in isolation; worth re-checking whenever that assumption about image
+  optimization changes.
+- **Data retention and deletion** — *Business/Build* — see
+  `docs/data-retention.md` for the full inventory. Nothing in the app expires
+  automatically: no scheduled purge, no per-record TTL, and no way to delete a
+  single tenant's data short of deleting their whole organization. That's a
+  policy question before it's a code one, and it's the same legal review the
+  Terms and Privacy Policy in Phase 1 need — the doc lists what's actually
+  stored (raw-identity documents and W-9s in the vault, screening results,
+  live Plaid tokens) and the specific questions worth a lawyer's answer.
+  Should be folded into that review rather than run as a separate one.
 
 ## Runs alongside all of the above
 
@@ -204,7 +237,10 @@ on their own clock while the phases above happen.
 
 - **Pricing strategy** — *Decide*. Feeds directly into Phase 1's
   monetization item and Phase 2's Stripe application-fee configuration.
-- **Legal review of Terms & Privacy Policy** — *Business*. See Phase 1.
+- **Legal review of Terms & Privacy Policy** — *Business*. See Phase 1. Worth
+  putting the retention/deletion questions in `docs/data-retention.md` in front
+  of the same reviewer at the same time — they're about the same data and the
+  answers shape what the Privacy Policy can honestly claim.
 - **Listing-platform partner applications** — *Business*. See Phase 3. Worth
   starting now since these review processes can take a while.
 

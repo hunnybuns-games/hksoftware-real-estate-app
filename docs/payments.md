@@ -104,6 +104,38 @@ app *is* the source of truth.
 Every handler is written to be idempotent — Stripe redelivers, and a second
 delivery must not send a second receipt or double-count a payment.
 
+### Abandoned checkouts, and the one exception to the rule above
+
+`startRentPaymentAction` writes a `PENDING` row *before* redirecting to Stripe,
+so a tenant who bails leaves a visible trace rather than a mystery. The cost is
+that closing the Checkout tab strands that row: Stripe does fire
+`checkout.session.expired`, but not for ~24 hours. Until then the ledger shows
+"Awaiting payment" rows nobody can clear, and a few abandoned attempts in a row
+— easy on a slow bank login — read like unpaid rent.
+
+`cancelPendingOnlinePaymentAction` is the out: a **Cancel** action on any
+`PENDING` row on the lease page. It's the one place besides the webhook that
+writes a Stripe-backed status, which is safe only because it never overrides
+Stripe — it asks first. It reads the session's `status` and branches:
+
+| Session | What happens |
+|---|---|
+| `open` | expired at Stripe, then the row is marked `FAILED` |
+| `expired` | already dead; the row is marked `FAILED` |
+| `complete` | **refused** — the tenant paid, the webhook just hasn't landed |
+
+Reading `session.status` rather than pattern-matching a failed `expire()` call
+is deliberate: those three values are documented API surface, error strings are
+not, and being wrong in the `complete` direction loses a real payment. Same
+reason it refuses outright if Stripe can't be reached, rather than assuming.
+A row that already has a `stripePaymentIntentId` is refused too — at that point
+Stripe has taken over and the rule above applies in full.
+
+Locally there's no way to *get* a `PENDING` row without a Stripe key, so
+`scripts/make-pending-payment.mjs` fabricates one against the seeded demo
+tenant for exercising this by hand. The branch table above is pinned by
+`src/actions/__tests__/cancel-pending-payment.test.ts`.
+
 ## The other payment paths
 
 Stripe is one source among several, and the app is designed to work fully
