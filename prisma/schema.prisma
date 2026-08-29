@@ -227,6 +227,8 @@ model Organization {
   listingConnections  ListingPlatformConnection[]
   vendors             Vendor[]
   screeningRequests   ScreeningRequest[]
+  documents           Document[]
+  portfolioImports    PortfolioImportBatch[]
 }
 
 /**
@@ -287,14 +289,16 @@ model User {
   tenant               Tenant?
   ownedProperties      PropertyOwner[]
   maintenanceNotes     MaintenanceNote[]
-  requestsCreated      MaintenanceRequest[] @relation("MaintenanceRequestCreatedBy")
+  requestsCreated      MaintenanceRequest[]   @relation("MaintenanceRequestCreatedBy")
   importBatches        PaymentImportBatch[]
   passwordResets       PasswordResetToken[]
   applicationsReviewed Application[]
   leaseDocumentsSent   LeaseDocument[]
   listingsCreated      Listing[]
-  screeningsRequested  ScreeningRequest[] @relation("ScreeningRequestedBy")
-  screeningsCompleted  ScreeningRequest[] @relation("ScreeningCompletedBy")
+  screeningsRequested  ScreeningRequest[]     @relation("ScreeningRequestedBy")
+  screeningsCompleted  ScreeningRequest[]     @relation("ScreeningCompletedBy")
+  documentsUploaded    Document[]
+  portfolioImports     PortfolioImportBatch[]
 
   @@index([organizationId])
 }
@@ -360,9 +364,10 @@ model Property {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  units    Unit[]
-  owners   PropertyOwner[]
-  expenses Expense[]
+  units     Unit[]
+  owners    PropertyOwner[]
+  expenses  Expense[]
+  documents Document[]
 
   @@index([organizationId])
 }
@@ -398,6 +403,7 @@ model Unit {
   maintenanceRequests MaintenanceRequest[]
   applications        Application[]
   listings            Listing[]
+  documents           Document[]
 
   @@unique([propertyId, label])
   @@index([propertyId])
@@ -425,6 +431,7 @@ model Tenant {
 
   leases     Lease[]
   invitation Invitation?
+  documents  Document[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -475,7 +482,8 @@ model Lease {
   // Set on the Application this lease was created from, when it was created
   // that way — see Application.leaseId below.
   application         Application?
-  documents           LeaseDocument[]
+  leaseDocuments      LeaseDocument[]
+  documents           Document[]
 
   @@index([organizationId])
   @@index([unitId])
@@ -596,15 +604,15 @@ model PaymentImportBatch {
 // ---------------------------------------------------------------------------
 
 model MaintenanceRequest {
-  id              String       @id @default(cuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  unitId          String
-  unit            Unit         @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  leaseId         String?
-  lease           Lease?       @relation(fields: [leaseId], references: [id], onDelete: SetNull)
-  createdByUserId String?
-  createdBy       User?        @relation("MaintenanceRequestCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId           String
+  unit             Unit         @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  leaseId          String?
+  lease            Lease?       @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  createdByUserId  String?
+  createdBy        User?        @relation("MaintenanceRequestCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   // Optional and org-scoped, not tenant-facing (see Vendor below) — assigning
   // or clearing this never touches the tenant portal.
   assignedVendorId String?
@@ -780,15 +788,15 @@ model ScreeningRequest {
   // uses, because this token doesn't grant account access, only a view of
   // (and a response to) one consent request. See the page's robots
   // directive in src/app/screening/[token]/layout.tsx.
-  consentToken      String     @unique
+  consentToken      String    @unique
   consentGivenAt    DateTime?
   consentDeclinedAt DateTime?
   // ESIGN-style audit trail — the same fields LeaseSignature already records,
   // for the same reason: a "permissible purpose" needs to be demonstrable
   // later, not just asserted. See docs/tenant-screening.md for how far that
   // actually goes toward real FCRA compliance (not all the way).
-  consentIpAddress String?
-  consentUserAgent String?
+  consentIpAddress  String?
+  consentUserAgent  String?
 
   provider String @default("manual")
 
@@ -1041,4 +1049,131 @@ model ListingPlatformConnection {
   updatedAt       DateTime            @updatedAt
 
   @@unique([organizationId, platform])
+}
+
+// ---------------------------------------------------------------------------
+// Document vault
+//
+// Every file a landlord actually has: signed leases as PDFs, W-9s, insurance
+// certificates, inspection reports, receipts, ID scans. Distinct from
+// LeaseDocument above, which is the lease instrument this app *generates* and
+// e-signs from a template - this is the pile of files that already existed
+// before the app did, plus everything scanned or emailed in since.
+// ---------------------------------------------------------------------------
+
+enum DocumentCategory {
+  LEASE // signed lease, addendum, renewal, termination
+  APPLICATION // rental application, screening report
+  INSURANCE // renter's policy, COI, property coverage
+  TAX // W-9, 1099, property tax bill
+  INSPECTION // move-in/move-out condition report, periodic inspection
+  RECEIPT // repair invoice, vendor bill, expense receipt
+  IDENTIFICATION // drivers licence, passport, proof of income
+  NOTICE // late notice, entry notice, eviction filing
+  STATEMENT // bank statement, rent roll, owner statement
+  PHOTO // unit photo not tied to a maintenance ticket or listing
+  OTHER
+}
+
+model Document {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Where this file is filed. Four nullable FKs rather than a generic
+  // (entityType, entityId) pair: the database enforces referential integrity
+  // and cascade-deletes for free this way, and Prisma can include the related
+  // record directly. A document may attach at whatever level it belongs to -
+  // property insurance has only propertyId, a signed lease has all four - and
+  // one with none set is filed at the organization, which is the honest
+  // representation of "dropped in, not yet sorted".
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  unitId     String?
+  unit       Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  tenantId   String?
+  tenant     Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  leaseId    String?
+  lease      Lease?    @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+
+  category DocumentCategory @default(OTHER)
+  title    String? // human label; falls back to filename in the UI
+  notes    String?
+
+  filename    String
+  // The type the *bytes* are, per src/lib/file-signature.ts - never the
+  // browser-declared one. This is what gets served back.
+  contentType String
+  sizeBytes   Int
+
+  // Object key in R2 (see src/lib/document-storage.ts). Not a URL: the bucket
+  // is private and every read goes through an authorized route, the same rule
+  // /api/photos already follows.
+  storageKey String @unique
+
+  // SHA-256 of the contents. Indexed, deliberately not unique: re-uploading
+  // the same PDF is worth *warning* about, but the same certificate genuinely
+  // can belong to two properties, so it must not be a hard block. Contrast
+  // PaymentImportBatch.contentHash, which is unique because a duplicate there
+  // would double-count money.
+  contentHash String
+
+  uploadedById String?
+  uploadedBy   User?   @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, contentHash])
+  @@index([organizationId, category])
+  @@index([propertyId])
+  @@index([unitId])
+  @@index([tenantId])
+  @@index([leaseId])
+}
+
+// ---------------------------------------------------------------------------
+// Portfolio import
+//
+// The migration path for a landlord arriving with a rent roll. Sibling of
+// PaymentImportBatch above and deliberately the same shape — upload, review,
+// confirm — but it creates Property/Unit/Tenant/Lease records rather than
+// Payment rows. See src/lib/portfolio-import.ts for the rules.
+//
+// No relation back to what it created, unlike PaymentImportBatch.payments.
+// An import that reuses an existing property and adds one unit to it has no
+// single owned set of rows to point at, and a cascade from here would be
+// actively dangerous: deleting an import record must never delete the
+// property it merged into. The row count and the stored file are the audit
+// trail instead.
+// ---------------------------------------------------------------------------
+
+model PortfolioImportBatch {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  status         ImportBatchStatus @default(DRAFT)
+  filename       String
+  uploadedById   String?
+  uploadedBy     User?             @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  rawCsv        String
+  // A PortfolioMapping — see PORTFOLIO_COLUMNS in src/lib/portfolio-import.ts.
+  columnMapping Json
+  rowCount      Int
+  contentHash   String
+
+  // Filled in on confirmation, so the history list can say what an import
+  // actually did without re-deriving it from a plan that no longer applies.
+  propertiesCreated Int @default(0)
+  unitsCreated      Int @default(0)
+  tenantsCreated    Int @default(0)
+  leasesCreated     Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, contentHash])
+  @@index([organizationId, createdAt])
 }

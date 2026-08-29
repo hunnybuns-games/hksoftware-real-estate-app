@@ -30,6 +30,8 @@
     "e2e:vendors": "node e2e/vendors.mjs",
     "e2e:tenant-screening": "node e2e/tenant-screening.mjs",
     "e2e:landlord10": "node e2e/landlord10-tour.mjs",
+    "e2e:documents": "node e2e/documents.mjs",
+    "e2e:portfolio-import": "node e2e/portfolio-import.mjs",
     "cf:build": "prisma generate && opennextjs-cloudflare build",
     "cf:preview": "npm run cf:build && opennextjs-cloudflare preview",
     "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy",

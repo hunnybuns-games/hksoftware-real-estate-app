@@ -25,7 +25,8 @@ Stripe Connect, Plaid bank feed) · the reconciliation engine · reports (rent
 roll, P&L, owner statements) · rental applications through to lease conversion
 · lease builder + e-signature · listings with a manual syndication tracker ·
 renter's insurance tracking · maintenance requests + vendor directory ·
-tenant and owner portals · address autocomplete · multi-tenant auth/RBAC/CSP
+tenant and owner portals · document vault with automatic filing · rent-roll
+portfolio import · address autocomplete · multi-tenant auth/RBAC/CSP
 hardening · full CI and e2e coverage.
 
 ## Start here
@@ -181,7 +182,11 @@ trade-offs (see MAINTAINER.md §13). Revisit before they become one.
 - **Move maintenance photos off D1** — *Build*. Photos live as blobs in the
   database today — fine at current volume, but D1 has a real per-database
   ceiling. R2 is the documented destination; the authorization check
-  (`canViewPhoto`) carries over unchanged.
+  (`canViewPhoto`) carries over unchanged. **Now unblocked**: the document
+  vault (`docs/documents.md`) added an `r2_buckets` binding and a
+  storage interface with R2 and local-disk implementations
+  (`src/lib/document-storage.ts`), so this is a port to an existing seam
+  rather than new infrastructure.
 - **Rehearse a real backup + restore** — *Configure*. The safe workflow
   already exists (Actions → D1 → Run workflow) and takes a backup
   automatically before anything destructive — it just hasn't been rehearsed

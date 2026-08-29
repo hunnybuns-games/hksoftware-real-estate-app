@@ -54,9 +54,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/app/payments", label: "Rent" },
     { href: "/app/reports", label: "Reports" },
     { href: "/app/maintenance", label: "Maintenance", badge: openRequests },
+    { href: "/app/documents", label: "Documents" },
   ];
 
-  const secondaryNav: NavItem[] = [{ href: "/app/settings", label: "Settings" }];
+  // Import sits in the secondary nav rather than the main list: it is an
+  // onboarding task a landlord runs once when migrating in, so it needs to
+  // stay reachable without taking a permanent slot next to the pages they
+  // use every day.
+  const secondaryNav: NavItem[] = [
+    { href: "/app/import", label: "Import portfolio" },
+    { href: "/app/settings", label: "Settings" },
+  ];
 
   return (
     <SidebarShell

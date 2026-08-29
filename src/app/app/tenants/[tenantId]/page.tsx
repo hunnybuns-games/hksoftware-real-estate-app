@@ -12,6 +12,7 @@ import { formatCents } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { Breadcrumbs, Card, LeaseStatusBadge, PageHeader } from "@/components/ui";
 import { DangerAction } from "@/components/danger-action";
+import { DocumentsCard } from "@/components/documents-card";
 import { TenantForm } from "../_components/tenant-form";
 import { InvitePortalButton } from "./_components/invite-portal-button";
 
@@ -170,6 +171,15 @@ export default async function TenantDetailPage({
               <p className="text-sm whitespace-pre-wrap text-slate-700">{tenant.notes}</p>
             </Card>
           ) : null}
+
+          <DocumentsCard
+            organizationId={ctx.organizationId}
+            scope={{
+              kind: "tenant",
+              id: tenant.id,
+              label: `${tenant.firstName} ${tenant.lastName}`,
+            }}
+          />
 
           <Card title="Remove tenant">
             <DangerAction
