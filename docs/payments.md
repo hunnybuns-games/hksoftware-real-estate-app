@@ -28,7 +28,7 @@ account:
 ```ts
 payment_intent_data: {
   transfer_data: { destination: connectedAccountId },
-  application_fee_amount: applicationFeeCents(amountCents),
+  application_fee_amount: checkoutApplicationFeeCents(amountCents, allowCards),
 }
 ```
 
@@ -42,7 +42,8 @@ Consequences, all intentional:
   we redirect to rather than a form in this app.
 - **The platform fee is the only money that ever accrues to us**, via
   `application_fee_amount`, controlled by `STRIPE_APPLICATION_FEE_BPS` and
-  defaulting to zero.
+  defaulting to zero — and, as of `checkoutApplicationFeeCents`, only ever
+  charged on an ACH-only session. See the next section for why.
 
 ### ACH first, cards opt-in
 
@@ -52,6 +53,23 @@ plus a fixed fee — on $1,800 of rent that's over $50 a month, per unit, which
 is real money to hand a processor for a recurring, predictable, non-impulse
 payment. ACH is the appropriate rail; cards exist as an escape hatch for a
 landlord who wants to offer them anyway.
+
+The fee decision (`STRIPE_APPLICATION_FEE_BPS`) is meant to apply to ACH
+only — cards stay fee-free for now. But `application_fee_amount` is fixed on
+the PaymentIntent at session creation, before the tenant has picked a method,
+so a session that *offers* cards has no way to know yet which rail will
+actually settle. `checkoutApplicationFeeCents` resolves that the safe way:
+no fee at all on any session where `allowCards` is true, rather than risk
+silently charging a card payment the ACH-only rate. The cost is a real one —
+an org with cards enabled collects no platform fee even on the ACH payments
+that come through it, until someone builds a way to collect the fee *after*
+the webhook knows which method settled (a reversed Transfer pulling it back
+from the connected account's balance is the standard Stripe pattern for
+this). That's deliberately not built here: it would be new, untested Stripe
+API surface, and there's no way to run it against a live Stripe test-mode
+account from every environment this code gets touched in to verify it before
+it ever handles real money. Build and verify it against a real test-mode
+Connect account before `STRIPE_ALLOW_CARDS` is ever set to `true` anywhere.
 
 ### Why hosted Checkout rather than Elements
 

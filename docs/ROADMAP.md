@@ -106,17 +106,19 @@ between "the app works" and "a stranger's rent money is safe here."
   `STRIPE_APPLICATION_FEE_BPS` (0 today, meaning no fee is actually charged
   yet). Deliberately narrower than Innago, which also takes card fees,
   application/screening fees, and other add-ons — ACH is the one line this
-  app charges. Two things still open: the actual rate, and a real gap this
-  decision exposed — `applicationFeeCents()` in `src/lib/stripe.ts` applies
-  the configured bps to *every* Checkout session regardless of which payment
-  method the tenant ends up choosing, not just ACH. Harmless today only
-  because `STRIPE_ALLOW_CARDS` is unset everywhere (so ACH is the only
-  method on offer) — the moment cards are enabled anywhere, this silently
-  starts taking a cut of card payments too, contradicting the decision above.
-  Needs fixing before `STRIPE_ALLOW_CARDS=true` is ever set: charge the fee
-  only when the settled PaymentIntent's payment method was `us_bank_account`,
-  which the webhook (the only place that knows what actually got used) can
-  check.
+  app charges. What's still open is the actual rate. The real gap this
+  decision exposed — `application_fee_amount` applying to every Checkout
+  session regardless of payment method, not just ACH — is **fixed, 2026-08-27**:
+  `checkoutApplicationFeeCents()` in `src/lib/stripe.ts` now returns no fee at
+  all whenever a session's `allowCards` is true, so a card payment can never
+  be silently charged the ACH rate. That fix is conservative, not complete —
+  see `docs/payments.md`'s "ACH first, cards opt-in" section: an org with
+  cards enabled currently collects *no* platform fee at all, even on the ACH
+  payments that come through it, because collecting it after the fact (once
+  the webhook knows which method settled) needs a reversed Transfer — new
+  Stripe API surface nobody's been able to verify against a live test-mode
+  account yet. Worth building once `STRIPE_ALLOW_CARDS` is actually on
+  somewhere and the lost ACH revenue is worth the work; not before.
 
 ## 2. Financial & compliance readiness
 

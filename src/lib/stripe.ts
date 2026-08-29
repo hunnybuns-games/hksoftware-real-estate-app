@@ -63,6 +63,38 @@ function applicationFeeCents(amountCents: number): number | undefined {
 }
 
 /**
+ * The application fee for a Checkout session, or undefined for none.
+ *
+ * `STRIPE_APPLICATION_FEE_BPS` is the ACH fee (see docs/ROADMAP.md, "Decide
+ * how ComfyLease actually makes money") — cards are meant to stay fee-free
+ * for now. But Checkout can't set the fee conditionally on which payment
+ * method the tenant actually picks: `application_fee_amount` is fixed on the
+ * PaymentIntent at session creation, before they've chosen anything. A
+ * session that offers both methods has no way to know yet which one will
+ * settle, so setting the fee unconditionally there would silently start
+ * charging card payments the same bps meant only for ACH the moment
+ * `allowCards` is ever turned on for an org.
+ *
+ * Collecting the fee after the fact — once the webhook knows which method
+ * actually settled — is possible in principle (a reversed Transfer pulls it
+ * back from the connected account's balance), but that path is unimplemented
+ * here: it would be new, untested Stripe API surface, and this repo has no
+ * way to run it against a live Stripe test-mode account to verify it before
+ * shipping it (see docs/payments.md). Until that's built and verified, the
+ * safe choice is no fee at all on any session that might use a card — never
+ * silently mischarging beats collecting a fee this code can't prove is
+ * right. Revisit if/when `STRIPE_ALLOW_CARDS` is actually turned on
+ * somewhere and the lost ACH revenue in that case is worth the work.
+ */
+export function checkoutApplicationFeeCents(
+  amountCents: number,
+  allowCards: boolean,
+): number | undefined {
+  if (allowCards) return undefined;
+  return applicationFeeCents(amountCents);
+}
+
+/**
  * Creates (or reuses) the org's Express account and returns an onboarding link.
  */
 export async function createConnectOnboardingLink(args: {
@@ -158,7 +190,7 @@ export async function createRentCheckoutSession(args: {
       // Destination charge: money lands on the platform then transfers to the
       // landlord's connected account.
       transfer_data: { destination: args.connectedAccountId },
-      application_fee_amount: applicationFeeCents(args.amountCents),
+      application_fee_amount: checkoutApplicationFeeCents(args.amountCents, args.allowCards),
       metadata: { leaseId: args.leaseId, paymentId: args.paymentId },
     },
     // Mirrored on the session so the webhook can reconcile from either object.
