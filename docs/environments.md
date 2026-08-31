@@ -37,11 +37,16 @@ someone's rent is in there.
 
 The whole fix is branch topology plus one Cloudflare setting:
 
-1. Bring `main` up to date with the current working branch (a merge, not a
-   force-push — the history on both sides is real).
+1. ~~Bring `main` up to date with the current working branch.~~ **Done,
+   2026-08-31.** It was a clean fast-forward — `main` was a direct ancestor,
+   0 ahead and 90 behind — so `main` and
+   `claude/property-management-mvp-gjlizb` are now byte-identical, with no
+   merge commit. Safe to do first precisely because Workers Builds still
+   points at the working branch, so updating `main` deployed nothing.
 2. Point **Cloudflare Workers Builds at `main`** instead of the working branch
    (Cloudflare dashboard → Workers & Pages → the project → Settings → Builds →
-   production branch).
+   production branch). Because of step 1 this is a no-op deploy: the two
+   branches are the same commit, so nothing rebuilds or changes.
 3. Turn on **branch protection for `main`** (GitHub → Settings → Rules/Branches):
    require a pull request, and require the `CI` workflow's checks to pass before
    merge.
@@ -52,8 +57,14 @@ After that, "CI is the only thing standing between a broken commit and
 production" becomes true in the way the comment already assumes it is — a red
 build blocks the merge, and nothing reaches `comfylease.com` that didn't pass.
 
-Worth doing as one change, because steps 2 and 3 without step 1 would leave
-production pinned to a branch that's ~85 commits stale.
+Steps 2 and 3 are both dashboard settings, and step 2 should come first: with
+protection on but Cloudflare still watching the working branch, pushes there
+would keep deploying ungated while `main` sat protected and unused.
+
+One consequence worth expecting: once step 3 is on, direct pushes to `main`
+stop working, including from an agent session. Work lands via PR from a
+branch. That's the point, but it does change the loop this repo has been
+using, where a session pushes straight to the branch that deploys.
 
 ### 2. Decide what guards migrations specifically — medium value
 
@@ -96,14 +107,14 @@ Revisit when either becomes true:
 
 This is deliberately split, because most of it isn't code:
 
-| Step | Who |
-|---|---|
-| Merge the working branch into `main` | Me, on request |
-| Point Workers Builds at `main` | **You** — Cloudflare dashboard |
-| Branch protection on `main` | **You** — GitHub repo settings |
-| Drop `d1.yml`'s auto-apply trigger (if wanted) | Me, on request |
-| Rehearse a backup restore | **You** — needs a throwaway D1 and dashboard access |
-| Add `env.staging` to `wrangler.jsonc` | Me, when it's wanted |
+| Step | Who | State |
+|---|---|---|
+| Bring `main` up to date | Me | **Done 2026-08-31** |
+| Point Workers Builds at `main` | **You** — Cloudflare dashboard | Outstanding |
+| Branch protection on `main` | **You** — GitHub repo settings | Outstanding |
+| Drop `d1.yml`'s auto-apply trigger (if wanted) | Me, on request | Not done — needs a decision |
+| Rehearse a backup restore | **You** — needs a throwaway D1 and dashboard access | Outstanding |
+| Add `env.staging` to `wrangler.jsonc` | Me, when it's wanted | Deferred on purpose (see above) |
 
 The two dashboard steps are the load-bearing ones, and neither is something a
 commit can do. Nothing in this file has been applied — changing where
