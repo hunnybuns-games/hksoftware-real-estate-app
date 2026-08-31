@@ -83,7 +83,7 @@ export function hashBytes(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-export async function putDocument(args: {
+export async function putObject(args: {
   organizationId: string;
   bytes: Uint8Array;
   contentType: string;
@@ -109,7 +109,7 @@ export async function putDocument(args: {
 }
 
 /** Null when the object is missing — a dangling row, not an exception worth throwing. */
-export async function getDocument(key: string): Promise<Uint8Array | null> {
+export async function getObject(key: string): Promise<Uint8Array | null> {
   if (onWorkers()) {
     const object = await bucket().get(key);
     if (!object) return null;
@@ -133,7 +133,7 @@ export async function getDocument(key: string): Promise<Uint8Array | null> {
  * regardless — the same trade-off disconnectBankAction makes when Plaid's
  * side of a disconnect fails.
  */
-export async function deleteDocument(key: string): Promise<void> {
+export async function deleteObject(key: string): Promise<void> {
   try {
     if (onWorkers()) {
       await bucket().delete(key);

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getDocument } from "@/lib/document-storage";
+import { getObject } from "@/lib/object-storage";
 import { detectFile } from "@/lib/file-signature";
 
 /**
@@ -56,7 +56,7 @@ export async function GET(
     if (!link) return notFound();
   }
 
-  const bytes = await getDocument(document.storageKey);
+  const bytes = await getObject(document.storageKey);
   // A row whose bytes are gone is a broken document, not a missing one, but
   // there is nothing useful to hand the browser either way.
   if (!bytes) return notFound();

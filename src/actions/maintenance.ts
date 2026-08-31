@@ -58,7 +58,10 @@ export async function createTenantRequestAction(
       );
     }
 
-    const photos = await readPhotos(formData, { maxCount: MAX_PHOTOS_PER_REQUEST });
+    const photos = await readPhotos(formData, {
+      organizationId: lease.organizationId,
+      maxCount: MAX_PHOTOS_PER_REQUEST,
+    });
     if (!photos.ok) return photos.state;
 
     const request = await db.maintenanceRequest.create({
@@ -138,7 +141,10 @@ export async function createStaffRequestAction(
     });
     if (!unit) return actionError("Please fix the highlighted fields.", { unitId: "Pick a unit." });
 
-    const photos = await readPhotos(formData, { maxCount: MAX_PHOTOS_PER_REQUEST });
+    const photos = await readPhotos(formData, {
+      organizationId: ctx.organizationId,
+      maxCount: MAX_PHOTOS_PER_REQUEST,
+    });
     if (!photos.ok) return photos.state;
 
     const request = await db.maintenanceRequest.create({

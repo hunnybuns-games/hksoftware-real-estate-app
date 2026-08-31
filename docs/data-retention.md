@@ -43,9 +43,10 @@ Ranked by how bad a leak or a missed deletion request would actually be:
 3. **`BankConnection.accessTokenEncrypted`** — a live Plaid access token,
    encrypted at rest (`src/lib/token-encryption.ts`). Not the bank data
    itself, but a live key that can pull it on demand for as long as the row
-   exists. Deleting the row (there's a disconnect action) doesn't currently
-   revoke the token at Plaid's end — only stops the app from using it, worth
-   checking whether Plaid needs an explicit revoke call too.
+   exists. Disconnecting does revoke it properly at Plaid's end
+   (`disconnectBankAction` calls `removeItem`), best-effort: if Plaid's side
+   fails the local row is still deleted, so an org can't get stuck unable to
+   reconnect. Nothing outstanding here.
 4. **`ListingPlatformConnection`'s API key** — same encryption, lower stakes
    (a listing-syndication credential, not financial data).
 5. **`Tenant`/`Application`** — name, email, phone, self-reported income,
@@ -113,5 +114,3 @@ Not started — this is what a real policy would need translated into code:
   `Tenant`, `Application`, `ScreeningRequest`, `Document`, and
   `NotificationLog` rows that reference them — the cross-table version of
   what cascade deletes already do at the organization level.
-- A real Plaid token revoke call (not just deleting the local row) when a
-  `BankConnection` is disconnected.

@@ -29,7 +29,7 @@ a pending one — the "Needs filing" list at the top of `/app/documents`.
 
 ## Where the bytes live
 
-`src/lib/document-storage.ts`, one interface with two implementations — the
+`src/lib/object-storage.ts`, one interface with two implementations — the
 same split, for the same reason, that `src/lib/db.ts` makes:
 
 | Where | Backend |

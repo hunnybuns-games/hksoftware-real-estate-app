@@ -1,10 +1,14 @@
 import { db } from "@/lib/db";
 import { canViewPhoto } from "@/actions/maintenance";
+import { photoBytes } from "@/lib/photos";
 
 /**
- * Serves a maintenance photo out of the database. Authorization runs on every
- * request (canViewPhoto) — the id is a cuid, but an unguessable URL is not an
- * access control, and a former tenant must not keep reading photos.
+ * Serves a maintenance photo. Authorization runs on every request
+ * (canViewPhoto) — the id is a cuid, but an unguessable URL is not an access
+ * control, and a former tenant must not keep reading photos.
+ *
+ * Bytes come from R2 or, for a row not yet backfilled, the legacy `data`
+ * column — photoBytes() owns that choice.
  */
 export async function GET(
   _req: Request,
@@ -20,14 +24,17 @@ export async function GET(
 
   const photo = await db.maintenancePhoto.findUnique({
     where: { id: photoId },
-    select: { data: true, contentType: true, filename: true },
+    select: { data: true, storageKey: true, contentType: true, filename: true },
   });
   if (!photo) return new Response("Not found", { status: 404 });
 
-  return new Response(new Uint8Array(photo.data), {
+  const bytes = await photoBytes(photo);
+  if (!bytes) return new Response("Not found", { status: 404 });
+
+  return new Response(new Uint8Array(bytes), {
     headers: {
       "Content-Type": photo.contentType,
-      "Content-Length": String(photo.data.byteLength),
+      "Content-Length": String(bytes.byteLength),
       "Content-Disposition": `inline; filename="${encodeURIComponent(photo.filename)}"`,
       // Private: the response is authorized per-user, so no shared cache may
       // hold it. Immutable because photos are never edited in place.

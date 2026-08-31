@@ -179,14 +179,21 @@ against.
 Nothing here is on fire at current scale — all deliberate, documented
 trade-offs (see MAINTAINER.md §13). Revisit before they become one.
 
-- **Move maintenance photos off D1** — *Build*. Photos live as blobs in the
-  database today — fine at current volume, but D1 has a real per-database
-  ceiling. R2 is the documented destination; the authorization check
-  (`canViewPhoto`) carries over unchanged. **Now unblocked**: the document
-  vault (`docs/documents.md`) added an `r2_buckets` binding and a
-  storage interface with R2 and local-disk implementations
-  (`src/lib/document-storage.ts`), so this is a port to an existing seam
-  rather than new infrastructure.
+- ~~**Move maintenance photos off D1**~~ — **Done, 2026-08-31** — see
+  `docs/photo-storage.md`. Both photo tables now write to the same R2 store
+  the document vault uses (`src/lib/object-storage.ts`, renamed from
+  `document-storage.ts` now that documents aren't its only caller). A row
+  carries `storageKey` *or* the legacy `data` column, and `photoBytes()` owns
+  that precedence, so rows written before the move keep serving. The
+  authorization checks (`canViewPhoto`/`canViewListingPhoto`) carried over
+  untouched, as predicted.
+
+  **One step is still yours**: existing production rows only move when you
+  call `GET /api/cron/photo-backfill` with the `CRON_SECRET` bearer token,
+  repeatedly, until it reports `"done": true`. Nothing breaks if you never do
+  — those rows keep serving out of `data` — but the D1 ceiling this was meant
+  to relieve isn't actually relieved until it runs. Dropping the `data`
+  column afterwards is a separate migration, deliberately not done yet.
 - **Rehearse a real backup + restore** — *Configure*. The safe workflow
   already exists (Actions → D1 → Run workflow) and takes a backup
   automatically before anything destructive — it just hasn't been rehearsed

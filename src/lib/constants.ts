@@ -5,7 +5,7 @@ export const MAX_PHOTOS_PER_REQUEST = 5;
 // what gets copy-pasted into Zillow/Realtor.com/etc.
 export const MAX_LISTING_PHOTOS = 12;
 
-// Document vault (src/lib/document-storage.ts). Far larger than
+// Document vault (src/lib/object-storage.ts). Far larger than
 // MAX_PHOTO_BYTES because these are scanned leases and inspection reports,
 // not thumbnails — a 30-page scan at 300dpi lands in the tens of megabytes.
 // The ceiling that actually matters is the Cloudflare Workers request-body

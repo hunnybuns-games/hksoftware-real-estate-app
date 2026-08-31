@@ -16,6 +16,7 @@ import {
   runAction,
 } from "@/lib/forms";
 import { readPhotos } from "@/lib/photos";
+import { deleteObject } from "@/lib/object-storage";
 import { MAX_LISTING_PHOTOS } from "@/lib/constants";
 import { SYNDICATION_PLATFORMS } from "@/lib/listing";
 import { auth } from "@/lib/auth";
@@ -47,7 +48,10 @@ export async function createListingAction(
     });
     if (!unit) return actionError("Please fix the highlighted fields.", { unitId: "Pick a unit." });
 
-    const photos = await readPhotos(formData, { maxCount: MAX_LISTING_PHOTOS });
+    const photos = await readPhotos(formData, {
+      organizationId: ctx.organizationId,
+      maxCount: MAX_LISTING_PHOTOS,
+    });
     if (!photos.ok) return photos.state;
 
     const listing = await db.listing.create({
@@ -139,7 +143,10 @@ export async function addListingPhotosAction(
       });
     }
 
-    const photos = await readPhotos(formData, { maxCount: remaining });
+    const photos = await readPhotos(formData, {
+      organizationId: ctx.organizationId,
+      maxCount: remaining,
+    });
     if (!photos.ok) return photos.state;
     if (photos.data.length === 0) {
       return actionError("Please fix the highlighted fields.", { photos: "Pick at least one photo." });
@@ -160,10 +167,15 @@ export async function deleteListingPhotoAction(photoId: string, _prev: ActionSta
 
     const photo = await db.listingPhoto.findFirst({
       where: { id: photoId, listing: { organizationId: ctx.organizationId } },
-      select: { id: true, listingId: true },
+      select: { id: true, listingId: true, storageKey: true },
     });
     if (!photo) return actionError("That photo no longer exists.");
 
+    // Stored bytes first, then the row — and the row goes regardless, since
+    // deleteObject swallows its own failures. Orphaned bytes are wasted space;
+    // an orphaned row is a photo staff can see and cannot remove. Same
+    // trade-off, for the same reason, as deleteDocumentAction.
+    if (photo.storageKey) await deleteObject(photo.storageKey);
     await db.listingPhoto.delete({ where: { id: photo.id } });
 
     revalidatePath(`/app/listings/${photo.listingId}`);

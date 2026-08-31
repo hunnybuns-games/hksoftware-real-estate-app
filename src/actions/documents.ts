@@ -19,7 +19,7 @@ import {
   MAX_DOCUMENT_BYTES,
 } from "@/lib/constants";
 import { detectFile, type FileFamily } from "@/lib/file-signature";
-import { deleteDocument, putDocument } from "@/lib/document-storage";
+import { deleteObject, putObject } from "@/lib/object-storage";
 import { suggestFiling, type FilingCandidates } from "@/lib/document-filing";
 
 /**
@@ -103,7 +103,7 @@ export async function uploadDocumentsAction(
       const bytes = new Uint8Array(await file.arrayBuffer());
       const detected = detectFile(bytes, filename);
 
-      const stored = await putDocument({
+      const stored = await putObject({
         organizationId: ctx.organizationId,
         bytes,
         contentType: detected.contentType,
@@ -409,10 +409,10 @@ export async function deleteDocumentAction(
     if (!document) return actionOk();
 
     // Stored bytes first, then the row. A failed storage delete is logged and
-    // swallowed (see deleteDocument): orphaned bytes are wasted space,
+    // swallowed (see deleteObject): orphaned bytes are wasted space,
     // whereas an orphaned row is a document the landlord can see and cannot
     // get rid of. Same trade-off disconnectBankAction makes with Plaid.
-    await deleteDocument(document.storageKey);
+    await deleteObject(document.storageKey);
     await db.document.delete({ where: { id: document.id } });
 
     revalidatePath("/app/documents");

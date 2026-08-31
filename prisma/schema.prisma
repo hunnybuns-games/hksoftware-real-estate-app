@@ -665,6 +665,15 @@ model Vendor {
 // Photos live in the database as bytes. This keeps the MVP deployable with nothing
 // but a database — no S3 bucket, no signed URLs, no extra vendor. Uploads are
 // capped (see src/lib/constants.ts); swap for object storage when volume grows.
+// Photo bytes live in R2 (src/lib/object-storage.ts), keyed by storageKey —
+// the same store the document vault uses. `data` is the pre-R2 column, kept
+// nullable so rows written before the move still serve: exactly one of the two
+// is set on any given row, and the serving route prefers storageKey. New
+// uploads only ever write storageKey.
+//
+// Rows are backfilled off `data` in batches by /api/cron/photo-backfill; the
+// column stays until that has finished everywhere, and dropping it is a
+// separate migration on purpose (see docs/photo-storage.md).
 model MaintenancePhoto {
   id          String             @id @default(cuid())
   requestId   String
@@ -672,7 +681,8 @@ model MaintenancePhoto {
   filename    String
   contentType String
   sizeBytes   Int
-  data        Bytes
+  data        Bytes?
+  storageKey  String?            @unique
   createdAt   DateTime           @default(now())
 
   @@index([requestId])
@@ -994,6 +1004,7 @@ model Listing {
   @@index([unitId])
 }
 
+// Same storageKey/data split as MaintenancePhoto above — see the comment there.
 model ListingPhoto {
   id          String   @id @default(cuid())
   listingId   String
@@ -1001,7 +1012,8 @@ model ListingPhoto {
   filename    String
   contentType String
   sizeBytes   Int
-  data        Bytes
+  data        Bytes?
+  storageKey  String?  @unique
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
 
