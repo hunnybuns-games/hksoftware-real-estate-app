@@ -77,10 +77,15 @@ Run from a clean database against commit `1e28100`:
 | `vitest` | **354 / 354** (25 files) |
 | `cf:migrations:check` | 12 migrations in step |
 | `cf:build` (OpenNext production bundle) | clean |
-| e2e — 15 suites | _see final line below_ |
+| e2e — 15 suites | **325 / 325 checks, 0 failures** |
 | CI on `main` @ `85ea0e4` | green (CI + D1 workflow) |
 
-<!-- E2E-RESULTS -->
+Per suite (every one exits 0): mvp 50 · reconciliation 16 · reports 19 ·
+security 29 · password-reset 14 · theme 35 · applications 17 · lease-signing
+17 · listings 21 · address-autocomplete 12 · vendors 15 · tenant-screening 17
+· landlord10 24 · documents 17 · portfolio-import 22. The last three ran
+against the landlord10 seed with `DEMO_PAYMENTS=true`, reseeded between
+suites since they mutate rows.
 
 **What the suites do not exercise** (and therefore what this run does not
 prove): live Stripe or Plaid calls (demo path + mocks); the rent-run cron's
@@ -249,5 +254,6 @@ Ship v1 without these; say so in the UI where a landlord would look for them.
 
 ---
 
-*Published as a filterable page: <!-- ARTIFACT-URL -->. This file is the
-durable copy; update it first if the two ever disagree.*
+*Published as a filterable page:
+https://claude.ai/code/artifact/b112a46e-92a7-42a2-90dd-d0a30967df72 — this
+file is the durable copy; update it first if the two ever disagree.*
