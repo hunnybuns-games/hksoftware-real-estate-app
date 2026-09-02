@@ -15,6 +15,11 @@ Each item is tagged by who acts on it:
 This is a point-in-time plan, not a tracker — update or replace sections as
 they're resolved rather than checking boxes in place.
 
+> **The itemised version lives in `docs/PRODUCTION-READINESS.md`** (2026-08-31):
+> a full security + product + ops audit rendered as a punch list with IDs,
+> severity, owner and effort. This file stays the narrative; that one is the
+> checklist. Where they disagree, the punch list is newer.
+
 ## Already shipped
 
 For context, not action — the app is further along than "what's left" might
