@@ -1,4 +1,3 @@
-import { db } from "@/lib/db";
 import { fromDateInputValue } from "@/lib/dates";
 import { parseDollarsToCents } from "@/lib/money";
 
@@ -352,28 +351,10 @@ export type ExistingPortfolio = {
   activeLeases: { unitId: string; tenantId: string }[];
 };
 
-/**
- * Loads that snapshot for one organization. Lives here, not in the action
- * file, on purpose: every export from a "use server" module is a callable
- * Server Action endpoint, and this takes an organizationId with no session
- * check of its own — the callers (a page and an action) have already
- * established theirs. See the gotcha in docs/MAINTAINER.md §4.
- */
-export async function loadExistingPortfolio(organizationId: string): Promise<ExistingPortfolio> {
-  const [properties, units, tenants, activeLeases] = await Promise.all([
-    db.property.findMany({ where: { organizationId }, select: { id: true, name: true } }),
-    db.unit.findMany({
-      where: { property: { organizationId } },
-      select: { id: true, propertyId: true, label: true },
-    }),
-    db.tenant.findMany({ where: { organizationId }, select: { id: true, email: true } }),
-    db.lease.findMany({
-      where: { organizationId, status: "ACTIVE" },
-      select: { unitId: true, tenantId: true },
-    }),
-  ]);
-  return { properties, units, tenants, activeLeases };
-}
+// The function that loads that snapshot from the database lives in
+// src/lib/portfolio-import-data.ts, not here: this module is imported by the
+// mapping form, a client component, and anything that touches `db` would be
+// bundled for the browser along with it.
 
 export type EntityPlan =
   | { action: "reuse"; id: string }

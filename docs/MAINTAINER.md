@@ -321,11 +321,13 @@ tables, the Rent page, the dashboard, and the owner dashboard all export through
 ## 8. Maintenance, notifications, cron
 
 Maintenance requests carry a status (`OPEN → IN_PROGRESS → RESOLVED`), priority, staff
-notes, and photos. **Photos are stored as blobs directly in the database**
-(`MaintenancePhoto.data`), not on disk or in object storage — a deliberate
-simplification that also happened to make the Cloudflare move easier, since there was no
-filesystem dependency to migrate. Every photo request re-checks authorization
-(`canViewPhoto`) rather than trusting an unguessable URL as access control.
+notes, and photos. **Photos live in R2** (`MaintenancePhoto.storageKey`), in the same
+bucket and behind the same `src/lib/object-storage.ts` interface as the document vault —
+see `docs/photo-storage.md`. They started life as blobs in the database
+(`MaintenancePhoto.data`, now nullable and kept only for rows written before the move);
+`photoBytes()` in `src/lib/photos.ts` reads whichever column a row has. Every photo
+request re-checks authorization (`canViewPhoto`) rather than trusting an unguessable URL
+as access control.
 
 `src/app/api/cron/rent-run/route.ts` is the daily job: post this month's rent charges,
 then send due/late notices. It's idempotent — charges are keyed on `(lease, type,
@@ -683,15 +685,17 @@ layout's `generateMetadata()` is a function for the same reason.
   nonce-based for scripts, which is where account takeover lives, but Next injects inline
   `<style>` with no nonce plumbing available. Injected CSS can restyle a page and read
   attribute values; it can't execute. Accepted, not overlooked.
-- **Error tracking + uptime monitoring — mostly built, needs configuring.** See
-  `docs/observability.md`. Workers Logs is on and every unhandled Server Action,
-  cron, and client-render failure now goes through one alerting path
-  (`reportServerError`); `/api/health` exists for an uptime pinger. Neither
-  `ERROR_ALERT_EMAIL` nor an actual external monitor pointed at `/api/health`
-  is set up yet — the code doesn't do that part on its own.
-- **Maintenance photos are blobs in D1.** Up to 5 × 4 MB per request, against a 500 MB
-  (free) or 10 GB (paid) per-database ceiling. Deliberate simplification for shipping; R2
-  is the destination, and `canViewPhoto`'s authorization check carries over unchanged.
+- **Error tracking is wired; uptime monitoring isn't.** See `docs/observability.md`.
+  Workers Logs is on, every unhandled Server Action, cron, and client-render failure
+  goes through one alerting path (`reportServerError`), and `ERROR_ALERT_EMAIL` is set
+  in `wrangler.jsonc` so those alerts land in an inbox. `/api/health` exists for an
+  uptime pinger, but nothing external is pointed at it yet — and the Access guard
+  returns a 302 on it, so a pinger needs a path exception first (see
+  `docs/PRODUCTION-READINESS.md`, OPS-3).
+- **Maintenance and listing photos are in R2 now** (`docs/photo-storage.md`), not D1
+  blobs. Rows written before the move still carry their bytes inline in the old `data`
+  column and are read either way; there is no backfill job, deliberately — the window
+  closes on its own as old requests are resolved and old listings are replaced.
 - **Vendors (`docs/vendors.md`) are a directory, not a workflow yet.** Assigning one to a
   maintenance request is a note to staff, not a notification to the vendor — no vendor
   login, no scheduling, no cost tracking tied to a request or vendor record. The framework

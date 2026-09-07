@@ -15,10 +15,10 @@ import {
   guessPortfolioMapping,
   parsePortfolioRows,
   planImport,
-  loadExistingPortfolio,
   type PortfolioMapping,
   type RowPlan,
 } from "@/lib/portfolio-import";
+import { loadExistingPortfolio } from "@/lib/portfolio-import-data";
 
 /**
  * Bringing a landlord's existing portfolio in from a rent roll.

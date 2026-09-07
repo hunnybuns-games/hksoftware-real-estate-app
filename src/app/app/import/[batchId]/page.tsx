@@ -12,7 +12,7 @@ import {
   type PortfolioMapping,
   type EntityPlan,
 } from "@/lib/portfolio-import";
-import { loadExistingPortfolio } from "@/lib/portfolio-import";
+import { loadExistingPortfolio } from "@/lib/portfolio-import-data";
 import { Badge, Banner, Breadcrumbs, Card, PageHeader, StatTile, Table } from "@/components/ui";
 import { MappingForm } from "./_components/mapping-form";
 import { ConfirmImportForm } from "./_components/confirm-import-form";

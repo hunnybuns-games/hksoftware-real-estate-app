@@ -90,10 +90,17 @@ jobs:
       # The suites are not hermetic — they read and write the same local
       # database the dev server uses, and assume the demo portfolio exists.
       # See e2e/README.md.
+      #
+      # Two seeds, two organizations: the demo portfolio (admin@example.com)
+      # that most suites drive, and the landlord10 dataset that e2e:documents
+      # and e2e:portfolio-import name specific tenants and a property from.
+      # They never touch each other — different org, different emails — so
+      # seeding both up front doesn't change what the earlier suites see.
       - name: Migrate and seed
         run: |
           npx prisma migrate deploy
           npx prisma db seed
+          npm run db:seed:landlord10
 
       - name: Start dev server
         run: npm run dev &
@@ -124,6 +131,13 @@ jobs:
       - run: npm run e2e:address-autocomplete
       - run: npm run e2e:vendors
       - run: npm run e2e:tenant-screening
+
+      # Against the landlord10 org seeded above. Both mutate that dataset
+      # (the importer creates a second property), which is fine here — the
+      # database is thrown away with the runner — but it's why they run last
+      # and why they're not part of `npm run e2e` locally.
+      - run: npm run e2e:documents
+      - run: npm run e2e:portfolio-import
 
       # Screenshots from the failing run are the fastest way to see what a
       # browser check actually hit.

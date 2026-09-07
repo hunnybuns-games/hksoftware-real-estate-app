@@ -1,6 +1,6 @@
 # End-to-end suites
 
-Eleven Playwright scripts that drive a real browser against a running dev server.
+Fifteen Playwright scripts that drive a real browser against a running dev server.
 They're plain Node scripts rather than a Playwright test-runner project on
 purpose — each one reads top-to-bottom as a description of the flow it checks,
 which is what you want when one fails at 2am and you need to know what it was
@@ -16,26 +16,45 @@ npm run e2e                             # or one at a time, see below
 
 | Script | Covers | Checks |
 |---|---|---|
-| `npm run e2e:mvp` | auth, properties, units, tenants, leases, rent, Stripe simulation, maintenance | 48 |
+| `npm run e2e:mvp` | auth, properties, units, tenants, leases, rent, Stripe simulation, maintenance | 50 |
 | `npm run e2e:reconciliation` | HAP/subsidy splits, manual source-aware entry, the CSV import flow | 16 |
 | `npm run e2e:reports` | rent roll, P&L, owner statements, every CSV export, owner scoping | 19 |
-| `npm run e2e:security` | cross-org isolation, signup/login abuse, role boundaries, open redirect, session revocation, CSP | 26 |
+| `npm run e2e:security` | cross-org isolation, signup/login abuse, role boundaries, open redirect, session revocation, CSP | 32 |
 | `npm run e2e:password-reset` | the reset flow: no account enumeration, single-use links, old password revoked | 14 |
-| `npm run e2e:theme` | dark mode: OS default, explicit choice, persistence, and a colour audit of every surface | 33 |
+| `npm run e2e:theme` | dark mode: OS default, explicit choice, persistence, and a colour audit of every surface | 35 |
 | `npm run e2e:applications` | public application intake, staff review/approval, convert-to-lease | 17 |
 | `npm run e2e:lease-signing` | lease builder + e-signature: generate, countersign & send, tenant review & sign | 17 |
 | `npm run e2e:listings` | listing builder, photo upload, syndication tracker, copy-paste export, platform-connection settings | 21 |
 | `npm run e2e:address-autocomplete` | property-form address autocomplete: suggestion fill, graceful degradation, CSP (Mapbox mocked, never really contacted) | 12 |
-| `npm run e2e:vendors` | vendor directory: add/edit, assign/unassign on a maintenance request, archive/reactivate | 13 |
+| `npm run e2e:vendors` | vendor directory: add/edit, assign/unassign on a maintenance request, archive/reactivate | 15 |
+| `npm run e2e:tenant-screening` | screening request from an application, FCRA consent page, staff recording the result | 17 |
 
-Each prints one line per check and exits non-zero if any failed.
+Those twelve are what `npm run e2e` runs, against the demo portfolio. Three more
+drive the `db:seed:landlord10` dataset instead (one landlord, ten tenants) and
+are run explicitly, after `npm run db:seed:landlord10`:
+
+| Script | Covers | Checks |
+|---|---|---|
+| `npm run e2e:documents` | document vault: mixed-batch upload, auto-identification and filing, manual correction, download route | 17 |
+| `npm run e2e:portfolio-import` | rent-roll importer: header mapping, preview classification of messy rows, import, resulting records | 22 |
+| `npm run e2e:landlord10` | a tour of every major feature with a different tenant exercising each; needs `DEMO_PAYMENTS=true` | 30 |
+
+Each prints one line per check and exits non-zero if any failed. CI runs all of
+them except the landlord10 tour (see `.github/workflows/ci.yml`) — the tour is
+a guided walkthrough that mutates most of its dataset and is more useful run by
+hand when something in the demo account looks off.
 
 ## Prerequisites and gotchas
 
 - **Seeded data is assumed.** The suites sign in as `admin@example.com` /
   `demo-password-123` and expect the demo portfolio `npm run db:seed` creates.
   They're not hermetic — they read and write the same local database your dev
-  server is using.
+  server is using. The landlord10 suites are the same story against
+  `npm run db:seed:landlord10`; the two seeds create separate organizations
+  and can coexist in one database, which is how CI runs them.
+- **The landlord10 suites mutate their dataset** (the importer creates a second
+  property; the tour approves an application and signs a lease). Re-seed
+  landlord10 before running any of them a second time.
 - **`e2e:security` creates organizations and leaves them behind.** It signs up
   fresh orgs each run to test cross-org isolation, so the local database
   accumulates test orgs. Re-seed when that gets noisy.
