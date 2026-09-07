@@ -203,6 +203,14 @@ log("open-redirect via redirectTo is blocked", !pageRedir.url().includes("evil.e
     const hadAccess = staff.url().includes("/app/properties");
     log("invited staff can reach the app before removal", hadAccess, staff.url());
 
+    // The file-serving and export routes are not pages: they never went
+    // through the page guards, and for a while they trusted the session
+    // token alone — so a removed member kept downloading CSVs and documents
+    // for the rest of the token's 30-day life. Establish the baseline here and
+    // re-check the same route with the same cookie after removal below.
+    const exportBefore = await staff.request.get(`${BASE}/api/export/rent-roll`);
+    log("invited staff can download an export before removal", exportBefore.status() === 200, `status=${exportBefore.status()}`);
+
     // Admin removes them, through the real UI action.
     await admin.goto(`${BASE}/app/settings/team`, { waitUntil: "networkidle" });
     const removeButton = admin
@@ -238,6 +246,16 @@ log("open-redirect via redirectTo is blocked", !pageRedir.url().includes("evil.e
       "stale session lands on a usable sign-in page rather than a redirect loop",
       staff.url().includes("/login"),
       staff.url(),
+    );
+
+    // Same stale cookie against a non-page route. This is the check that
+    // would have caught the token-trusting export/file routes: a 200 here
+    // means the removal revoked pages but not downloads.
+    const exportAfter = await staff.request.get(`${BASE}/api/export/rent-roll`);
+    log(
+      "removed member can no longer download an export with the stale session",
+      exportAfter.status() === 401,
+      `status=${exportAfter.status()}`,
     );
     await staffCtx.close();
   }

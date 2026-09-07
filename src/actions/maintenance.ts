@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { assertStaff, assertTenant, AuthorizationError } from "@/lib/rbac";
+import { assertStaff, assertTenant, AuthorizationError, liveSessionUser } from "@/lib/rbac";
 import {
   type ActionState,
   actionError,
@@ -19,7 +19,6 @@ import {
   notifyVendorAssigned,
 } from "@/lib/notifications";
 import { readPhotos } from "@/lib/photos";
-import { auth } from "@/lib/auth";
 
 const requestSchema = z.object({
   title: z.string().trim().min(1, "Give the request a short title.").max(140),
@@ -393,8 +392,7 @@ export async function addTenantCommentAction(
  * see photos in their org; a tenant sees only photos on their own requests.
  */
 export async function canViewPhoto(photoId: string): Promise<boolean> {
-  const session = await auth();
-  const user = session?.user;
+  const user = await liveSessionUser();
   if (!user?.id) return false;
 
   const photo = await db.maintenancePhoto.findUnique({

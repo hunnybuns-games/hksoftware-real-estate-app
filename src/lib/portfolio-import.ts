@@ -1,3 +1,4 @@
+import { db } from "@/lib/db";
 import { fromDateInputValue } from "@/lib/dates";
 import { parseDollarsToCents } from "@/lib/money";
 
@@ -5,7 +6,7 @@ import { parseDollarsToCents } from "@/lib/money";
  * Turning a rent roll into real records.
  *
  * The other importer in this app (src/lib/import-mapping.ts) reads a bank
- * statement into Payment rows — one flat kind of thing, already-happened
+ * statement into Payment rows â one flat kind of thing, already-happened
  * money. This one reads the spreadsheet a landlord is *migrating in on*: one
  * row per occupied unit, carrying a property, a unit, a tenant and a lease
  * all at once, which have to be created in dependency order and deduplicated
@@ -13,14 +14,14 @@ import { parseDollarsToCents } from "@/lib/money";
  *
  * Everything here is pure. Nothing touches the database, and the plan is
  * computed from an explicit snapshot of what already exists (see
- * `planImport`), so every rule below is unit-testable — the same split
+ * `planImport`), so every rule below is unit-testable â the same split
  * reconciliation.ts makes between computeReconciliation and
  * applyReconciliation, and for the same reason: this is the code that decides
  * whether a landlord ends up with 40 leases or 80.
  *
  * What it deliberately does not do: create Charge or Payment rows. Billing
  * history is generateRentCharges()'s job (src/lib/ledger.ts), which already
- * knows the rules — one charge per calendar month from the lease start,
+ * knows the rules â one charge per calendar month from the lease start,
  * capped so onboarding an old lease does not post five years of history.
  * Duplicating that here would give two answers to the same question. Import
  * the leases, then run rent.
@@ -78,7 +79,7 @@ function normalize(header: string): string {
 
 /**
  * Short candidates are matched exactly and never loosely. The two-letter
- * abbreviations real exports use — "st" for state, "ba" for bathrooms — are
+ * abbreviations real exports use â "st" for state, "ba" for bathrooms â are
  * substrings of half the English language: left in the loose pass, "st"
  * claims "Lease Start" and "ba" claims "Balance", and because a header can
  * only be taken once, the field that genuinely wanted that column is left
@@ -104,7 +105,7 @@ function findHeader(headers: string[], candidates: string[], taken: Set<string>)
 
 /**
  * One header can only fill one role. Without that rule a sheet with both
- * "Rent" and "Market Rent" quietly maps the same column twice, and — worse —
+ * "Rent" and "Market Rent" quietly maps the same column twice, and â worse â
  * a "Tenant Email" column gets claimed by `tenantName` first (it contains
  * "tenant"), leaving names blank and emails duplicated into the name field.
  * Fields are resolved in decreasing order of how distinctive their headers
@@ -175,7 +176,7 @@ export type ParsedPortfolioRow = {
  *
  * Two conventions in the wild, and they disagree about which half comes
  * first: "Smith, John" and "John Smith". The comma is the tell. Anything
- * beyond two parts collapses into the first name ("Maria del Carmen Ruiz" →
+ * beyond two parts collapses into the first name ("Maria del Carmen Ruiz" â
  * first "Maria del Carmen", last "Ruiz") rather than being dropped, because
  * losing part of somebody's name is worse than an odd split.
  */
@@ -197,12 +198,12 @@ export function splitName(raw: string): { firstName: string; lastName: string } 
  * A placeholder address for a tenant the sheet has no email for.
  *
  * Tenant.email is required and unique per organization, so a row without one
- * cannot simply be left blank — but refusing the row outright would make this
+ * cannot simply be left blank â but refusing the row outright would make this
  * whole feature useless to any landlord whose spreadsheet predates collecting
  * email addresses, which is most of them.
  *
  * `.invalid` is reserved by RFC 2606 and can never resolve, so a placeholder
- * can never accidentally deliver mail to a real stranger — the failure mode
+ * can never accidentally deliver mail to a real stranger â the failure mode
  * is a bounced send that gets logged, not a message to the wrong person. Made
  * deterministic from property and unit so re-importing the same sheet matches
  * the same tenant rather than creating a second one.
@@ -217,7 +218,7 @@ export function placeholderEmail(propertyName: string, unitLabel: string): strin
   return `${slug(unitLabel)}.${slug(propertyName)}@no-email.invalid`;
 }
 
-/** Accepts ISO, US slash, and US dash date shapes — same set the bank importer takes. */
+/** Accepts ISO, US slash, and US dash date shapes â same set the bank importer takes. */
 export function parseImportDate(raw: string): Date | null {
   const value = raw.trim();
   if (!value) return null;
@@ -274,20 +275,20 @@ export function parsePortfolioRows(
     const unitLabel = cell(row, "unitLabel") || "House";
 
     if (!propertyName) {
-      errors.push("No property name or address — every unit has to belong to a property.");
+      errors.push("No property name or address â every unit has to belong to a property.");
     }
 
     const nameCell = cell(row, "tenantName");
     const { firstName, lastName } = splitName(nameCell);
     if (!nameCell) errors.push("No tenant name.");
-    else if (!lastName) warnings.push(`Only one name part ("${nameCell}") — imported as a first name.`);
+    else if (!lastName) warnings.push(`Only one name part ("${nameCell}") â imported as a first name.`);
 
     let email = cell(row, "tenantEmail").toLowerCase();
     let emailSynthesized = false;
     if (!email) {
       email = placeholderEmail(propertyName || "property", unitLabel);
       emailSynthesized = true;
-      warnings.push("No email — a placeholder was generated.");
+      warnings.push("No email â a placeholder was generated.");
     } else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       errors.push(`"${email}" does not look like an email address.`);
     }
@@ -295,22 +296,22 @@ export function parsePortfolioRows(
     const rentRaw = cell(row, "rentAmount");
     const rentCents = rentRaw ? parseDollarsToCents(rentRaw) : null;
     if (rentRaw && rentCents === null) errors.push(`Could not read a rent amount from "${rentRaw}".`);
-    if (!rentRaw) warnings.push("No rent amount — the lease will be created at $0.");
+    if (!rentRaw) warnings.push("No rent amount â the lease will be created at $0.");
 
     const depositRaw = cell(row, "depositAmount");
     const depositCents = depositRaw ? parseDollarsToCents(depositRaw) : null;
     if (depositRaw && depositCents === null) {
-      warnings.push(`Could not read a deposit from "${depositRaw}" — left blank.`);
+      warnings.push(`Could not read a deposit from "${depositRaw}" â left blank.`);
     }
 
     const startRaw = cell(row, "leaseStart");
     const leaseStart = parseImportDate(startRaw);
     if (startRaw && !leaseStart) errors.push(`Could not read a lease start date from "${startRaw}".`);
-    if (!startRaw) warnings.push("No lease start date — today will be used.");
+    if (!startRaw) warnings.push("No lease start date â today will be used.");
 
     const endRaw = cell(row, "leaseEnd");
     const leaseEnd = parseImportDate(endRaw);
-    if (endRaw && !leaseEnd) warnings.push(`Could not read a lease end date from "${endRaw}" — left open.`);
+    if (endRaw && !leaseEnd) warnings.push(`Could not read a lease end date from "${endRaw}" â left open.`);
     if (leaseStart && leaseEnd && leaseEnd.getTime() < leaseStart.getTime()) {
       errors.push("Lease end date is before the start date.");
     }
@@ -347,14 +348,37 @@ export type ExistingPortfolio = {
   properties: { id: string; name: string }[];
   units: { id: string; propertyId: string; label: string }[];
   tenants: { id: string; email: string }[];
-  /** Only leases that are still live — an ENDED lease should not block a new one. */
+  /** Only leases that are still live â an ENDED lease should not block a new one. */
   activeLeases: { unitId: string; tenantId: string }[];
 };
+
+/**
+ * Loads that snapshot for one organization. Lives here, not in the action
+ * file, on purpose: every export from a "use server" module is a callable
+ * Server Action endpoint, and this takes an organizationId with no session
+ * check of its own — the callers (a page and an action) have already
+ * established theirs. See the gotcha in docs/MAINTAINER.md §4.
+ */
+export async function loadExistingPortfolio(organizationId: string): Promise<ExistingPortfolio> {
+  const [properties, units, tenants, activeLeases] = await Promise.all([
+    db.property.findMany({ where: { organizationId }, select: { id: true, name: true } }),
+    db.unit.findMany({
+      where: { property: { organizationId } },
+      select: { id: true, propertyId: true, label: true },
+    }),
+    db.tenant.findMany({ where: { organizationId }, select: { id: true, email: true } }),
+    db.lease.findMany({
+      where: { organizationId, status: "ACTIVE" },
+      select: { unitId: true, tenantId: true },
+    }),
+  ]);
+  return { properties, units, tenants, activeLeases };
+}
 
 export type EntityPlan =
   | { action: "reuse"; id: string }
   | { action: "create" }
-  /** Already exists and is already leased — importing again would duplicate it. */
+  /** Already exists and is already leased â importing again would duplicate it. */
   | { action: "conflict"; reason: string };
 
 export type RowPlan = {
@@ -364,7 +388,7 @@ export type RowPlan = {
   unit: EntityPlan;
   tenant: EntityPlan;
   lease: EntityPlan;
-  /** False when the row cannot be imported — a parse error, or a live lease already there. */
+  /** False when the row cannot be imported â a parse error, or a live lease already there. */
   importable: boolean;
 };
 
@@ -386,7 +410,7 @@ function keyFor(propertyName: string): string {
 }
 
 /**
- * Works out, for every row, what would be created and what would be reused —
+ * Works out, for every row, what would be created and what would be reused â
  * without writing anything. This is what the preview screen renders and what
  * the commit step then executes, so the two can never disagree about what an
  * import is going to do.
@@ -434,7 +458,7 @@ export function planImport(rows: ParsedPortfolioRow[], existing: ExistingPortfol
     if (!existingTenantId) plannedTenants.add(row.email);
 
     // The one genuine conflict: this unit already has a live lease. Importing
-    // would double-lease it, so the row is blocked rather than merged — the
+    // would double-lease it, so the row is blocked rather than merged â the
     // landlord has to decide whether the sheet or the app is right.
     let lease: EntityPlan = { action: "create" };
     if (existingUnitId && leasedUnitIds.has(existingUnitId)) {
@@ -448,7 +472,7 @@ export function planImport(rows: ParsedPortfolioRow[], existing: ExistingPortfol
     return { rowIndex: row.rowIndex, row, property, unit, tenant, lease, importable };
   });
 
-  // Counted over importable rows only — a blocked row creates nothing, and a
+  // Counted over importable rows only â a blocked row creates nothing, and a
   // preview that promised otherwise would be lying about the outcome.
   const live = plans.filter((p) => p.importable);
   const distinct = (predicate: (p: RowPlan) => string | null) =>

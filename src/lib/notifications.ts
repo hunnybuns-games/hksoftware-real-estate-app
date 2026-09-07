@@ -198,6 +198,7 @@ export function notifyStaffInvite(args: {
   return sendEmailSafely({
     to: args.to.email,
     type: "STAFF_INVITE",
+    sensitive: true,
     organizationId: args.organizationId,
     subject: `${args.inviterName} invited you to ${args.orgName}`,
     body: `Hi ${args.to.name},
@@ -222,6 +223,7 @@ export function notifyTenantInvite(args: {
   return sendEmailSafely({
     to: args.to.email,
     type: "TENANT_INVITE",
+    sensitive: true,
     organizationId: args.organizationId,
     subject: `Set up your resident portal for ${args.propertyName}`,
     body: `Hi ${args.to.name},
@@ -351,6 +353,7 @@ export function notifyScreeningRequested(args: {
   return sendEmailSafely({
     to: args.to.email,
     type: "SCREENING_REQUESTED",
+    sensitive: true,
     organizationId: args.organizationId,
     subject: `${args.orgName} needs your consent for a screening report`,
     body: `Hi ${args.to.name},

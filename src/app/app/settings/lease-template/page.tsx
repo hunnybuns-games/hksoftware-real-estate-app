@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireStaff } from "@/lib/rbac";
-import { ensureDefaultTemplate, updateLeaseTemplateAction } from "@/actions/lease-templates";
+import { updateLeaseTemplateAction } from "@/actions/lease-templates";
+import { ensureDefaultTemplate } from "@/lib/lease-templates";
 import { LEASE_CLAUSES } from "@/lib/lease-document";
 import { Card } from "@/components/ui";
 import { LeaseTemplateForm } from "../_components/lease-template-form";

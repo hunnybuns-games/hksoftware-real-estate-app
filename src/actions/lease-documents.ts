@@ -20,7 +20,7 @@ import {
   defaultDocumentTitle,
   renderLeaseDocument,
 } from "@/lib/lease-document";
-import { ensureDefaultTemplate } from "@/actions/lease-templates";
+import { ensureDefaultTemplate } from "@/lib/lease-templates";
 import { base64ToBytes } from "@/lib/encoding";
 import { detectImageType } from "@/lib/image-signature";
 import { MAX_SIGNATURE_IMAGE_BYTES } from "@/lib/constants";

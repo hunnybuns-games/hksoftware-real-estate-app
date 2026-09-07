@@ -52,7 +52,11 @@ export default async function TeamPage() {
   ]);
 
   const owners = members.filter((m) => m.role === "OWNER");
-  const showInviteLinks = !process.env.RESEND_API_KEY;
+  // Admins only. A live invite link is a bearer credential for whatever role
+  // the invite carries — showing an ADMIN invite to a STAFF member is handing
+  // them an admin account. Non-admins can see that an invite is pending, not
+  // redeem it.
+  const showInviteLinks = isAdmin && !process.env.RESEND_API_KEY;
 
   return (
     <div className="space-y-6">
@@ -138,7 +142,7 @@ export default async function TeamPage() {
       {owners.length > 0 ? (
         <Card
           title="Owner access"
-          description="Owners only see the properties you tick here — and only the financial summary, never tenant contact details."
+          description="Owners only see the properties you tick here â and only the financial summary, never tenant contact details."
         >
           {properties.length === 0 ? (
             <EmptyState

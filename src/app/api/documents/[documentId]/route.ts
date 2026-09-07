@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { liveSessionUser } from "@/lib/rbac";
 import { db } from "@/lib/db";
 import { getObject } from "@/lib/object-storage";
 import { detectFile } from "@/lib/file-signature";
@@ -27,8 +27,7 @@ export async function GET(
   // someone who is not allowed to see it.
   const notFound = () => new Response("Not found", { status: 404 });
 
-  const session = await auth();
-  const user = session?.user;
+  const user = await liveSessionUser();
   if (!user?.id) return notFound();
   if (user.role === "TENANT") return notFound();
 

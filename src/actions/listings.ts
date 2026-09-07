@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { assertStaff } from "@/lib/rbac";
+import { assertStaff, liveSessionUser } from "@/lib/rbac";
 import {
   type ActionState,
   actionError,
@@ -19,7 +19,6 @@ import { readPhotos } from "@/lib/photos";
 import { deleteObject } from "@/lib/object-storage";
 import { MAX_LISTING_PHOTOS } from "@/lib/constants";
 import { SYNDICATION_PLATFORMS } from "@/lib/listing";
-import { auth } from "@/lib/auth";
 
 const listingSchema = z.object({
   unitId: z.string().min(1, "Pick a unit."),
@@ -242,8 +241,7 @@ export async function updateListingSyndicationAction(
  * TENANT branch.
  */
 export async function canViewListingPhoto(photoId: string): Promise<boolean> {
-  const session = await auth();
-  const user = session?.user;
+  const user = await liveSessionUser();
   if (!user?.id) return false;
   if (user.role === "TENANT") return false;
 

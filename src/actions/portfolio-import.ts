@@ -15,7 +15,7 @@ import {
   guessPortfolioMapping,
   parsePortfolioRows,
   planImport,
-  type ExistingPortfolio,
+  loadExistingPortfolio,
   type PortfolioMapping,
   type RowPlan,
 } from "@/lib/portfolio-import";
@@ -330,22 +330,6 @@ async function applyPlans(
   }
 
   return created;
-}
-
-export async function loadExistingPortfolio(organizationId: string): Promise<ExistingPortfolio> {
-  const [properties, units, tenants, activeLeases] = await Promise.all([
-    db.property.findMany({ where: { organizationId }, select: { id: true, name: true } }),
-    db.unit.findMany({
-      where: { property: { organizationId } },
-      select: { id: true, propertyId: true, label: true },
-    }),
-    db.tenant.findMany({ where: { organizationId }, select: { id: true, email: true } }),
-    db.lease.findMany({
-      where: { organizationId, status: "ACTIVE" },
-      select: { unitId: true, tenantId: true },
-    }),
-  ]);
-  return { properties, units, tenants, activeLeases };
 }
 
 export async function deletePortfolioBatchAction(

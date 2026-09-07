@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { liveSessionUser } from "@/lib/rbac";
 import { db } from "@/lib/db";
 import { getPropertyPL } from "@/lib/reports";
 import { toCsv, csvResponse } from "@/lib/csv";
@@ -16,8 +16,7 @@ import { PAYMENT_SOURCE_LABELS } from "@/lib/payment-source";
  * as-is.
  */
 export async function GET(req: Request): Promise<Response> {
-  const session = await auth();
-  const user = session?.user;
+  const user = await liveSessionUser();
   if (!user?.id) return Response.json({ error: "Sign in required." }, { status: 401 });
   if (!user.organizationId) return Response.json({ error: "No organization." }, { status: 403 });
 

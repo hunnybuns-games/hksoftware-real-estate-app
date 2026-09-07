@@ -5,29 +5,6 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { assertStaff } from "@/lib/rbac";
 import { type ActionState, actionError, actionOk, nameField, parseForm, runAction } from "@/lib/forms";
-import { DEFAULT_TEMPLATE_BODY } from "@/lib/lease-document";
-
-/**
- * One reusable base template per organization — the wording staff edit here
- * is what every new lease document starts from (see
- * src/actions/lease-documents.ts). A generated document is a snapshot, so
- * editing this never changes a document that's already been created.
- */
-export async function ensureDefaultTemplate(organizationId: string) {
-  const existing = await db.leaseTemplate.findFirst({
-    where: { organizationId },
-    orderBy: { createdAt: "asc" },
-  });
-  if (existing) return existing;
-
-  return db.leaseTemplate.create({
-    data: {
-      organizationId,
-      name: "Standard Residential Lease",
-      body: DEFAULT_TEMPLATE_BODY,
-    },
-  });
-}
 
 const templateSchema = z.object({
   name: nameField,
