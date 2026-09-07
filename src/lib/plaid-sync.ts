@@ -174,7 +174,8 @@ export async function syncBankConnection(bankConnectionId: string): Promise<Sync
 
     const toCreate: PaymentCreateData[] = [];
     const toUpdate: { id: string; transaction: PlaidTransaction }[] = [];
-    const toDeleteIds: string[] = [];
+    const toMarkCorrected: string[] = [];
+    const toMarkRemoved: string[] = [];
 
     for (const t of page.added) {
       const decision = decideAddedTransaction(t, existingByRef.has(t.transactionId), candidates);
@@ -196,7 +197,7 @@ export async function syncBankConnection(bankConnectionId: string): Promise<Sync
         toUpdate.push({ id: existing.id, transaction: t });
         modifiedCount += 1;
       } else if (decision.action === "delete" && existing) {
-        toDeleteIds.push(existing.id);
+        toMarkCorrected.push(existing.id);
         modifiedCount += 1;
       }
       if (decision.action !== "skip" && decision.leaseId) affectedLeaseIds.add(decision.leaseId);
@@ -205,7 +206,7 @@ export async function syncBankConnection(bankConnectionId: string): Promise<Sync
     for (const transactionId of page.removedTransactionIds) {
       const existing = existingByRef.get(transactionId);
       if (!existing) continue;
-      toDeleteIds.push(existing.id);
+      toMarkRemoved.push(existing.id);
       removedCount += 1;
       if (existing.leaseId) affectedLeaseIds.add(existing.leaseId);
     }
@@ -231,8 +232,22 @@ export async function syncBankConnection(bankConnectionId: string): Promise<Sync
       });
     }
 
-    for (const chunk of chunked(toDeleteIds, ID_CHUNK)) {
-      await db.payment.deleteMany({ where: { id: { in: chunk } } });
+    // Never hard-delete. A row the bank withdrew may carry a lease match a
+    // human made by hand, and some institutions reissue a transaction id when
+    // it moves from pending to posted - deleting the old row lost that match
+    // and left the new one UNMATCHED. FAILED is non-crediting (see
+    // CREDITING_STATUSES in ledger.ts), so the ledger effect is identical to
+    // deletion, while the row, its leaseId and the reason stay on the record.
+    for (const [ids, failureMessage] of [
+      [toMarkCorrected, "Corrected by the bank - no longer a deposit"],
+      [toMarkRemoved, "Removed by the bank"],
+    ] as const) {
+      for (const chunk of chunked(ids, ID_CHUNK)) {
+        await db.payment.updateMany({
+          where: { id: { in: chunk } },
+          data: { status: "FAILED", failedAt: new Date(), failureMessage },
+        });
+      }
     }
 
     cursor = page.nextCursor;

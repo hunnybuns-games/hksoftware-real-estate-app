@@ -55,10 +55,16 @@ const fakeDb = {
     }),
   },
   payment: {
-    findMany: vi.fn(async ({ where }: { where: { externalRef: { in: string[] } } }) => {
-      record("payment.findMany", where.externalRef.in.length);
-      return []; // nothing already synced
-    }),
+    findMany: vi.fn(
+      async ({
+        where,
+      }: {
+        where: { externalRef: { in: string[] } };
+      }): Promise<{ id: string; leaseId: string | null; externalRef: string }[]> => {
+        record("payment.findMany", where.externalRef.in.length);
+        return []; // nothing already synced
+      },
+    ),
     createMany: vi.fn(async ({ data }: { data: unknown[] }) => {
       record("payment.createMany", data.length);
       return { count: data.length };
@@ -69,6 +75,10 @@ const fakeDb = {
     }),
     deleteMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) => {
       record("payment.deleteMany", where.id.in.length);
+      return { count: where.id.in.length };
+    }),
+    updateMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) => {
+      record("payment.updateMany", where.id.in.length);
       return { count: where.id.in.length };
     }),
   },
@@ -241,5 +251,49 @@ describe("syncBankConnection query budget", () => {
 
     expect(result.added).toBe(0);
     expect(countOf("payment.createMany")).toBe(0);
+  });
+});
+
+describe("transactions the bank withdraws", () => {
+  it("marks a removed transaction's payment FAILED and keeps its lease match, never deleting it", async () => {
+    // A row a human already matched to a lease; Plaid then reports the
+    // transaction removed (a reversal, or an id reissued on pending->posted).
+    // Deleting it destroyed that match. FAILED is non-crediting, so the ledger
+    // effect is the same, but the row and its leaseId stay on the record.
+    fakeDb.payment.findMany.mockResolvedValueOnce([
+      { id: "pay-matched", leaseId: "lease-1", externalRef: "tx-gone" },
+    ]);
+    pages.push({ added: [], modified: [], removedTransactionIds: ["tx-gone"], nextCursor: "c1", hasMore: false });
+
+    const result = await syncBankConnection("conn-1");
+
+    expect(result.removed).toBe(1);
+    expect(countOf("payment.deleteMany")).toBe(0);
+    expect(fakeDb.payment.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["pay-matched"] } },
+      data: { status: "FAILED", failedAt: expect.any(Date), failureMessage: "Removed by the bank" },
+    });
+    // The lease it was matched to gets re-reconciled, since money it counted
+    // toward just stopped counting.
+    expect(countOf("applyReconciliation")).toBe(1);
+  });
+
+  it("marks a deposit the bank corrected into a debit FAILED with its own reason", async () => {
+    fakeDb.payment.findMany.mockResolvedValueOnce([
+      { id: "pay-corrected", leaseId: null, externalRef: "tx-flipped" },
+    ]);
+    // Same id comes back in `modified` but is no longer a deposit (a debit).
+    const debit: PlaidTransaction = { ...deposit(1), transactionId: "tx-flipped", amountCents: -4200 };
+    pages.push({ added: [], modified: [debit], removedTransactionIds: [], nextCursor: "c1", hasMore: false });
+
+    await syncBankConnection("conn-1");
+
+    expect(countOf("payment.deleteMany")).toBe(0);
+    expect(fakeDb.payment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ["pay-corrected"] } },
+        data: expect.objectContaining({ status: "FAILED", failureMessage: "Corrected by the bank - no longer a deposit" }),
+      }),
+    );
   });
 });

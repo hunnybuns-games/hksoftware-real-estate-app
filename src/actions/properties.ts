@@ -93,18 +93,24 @@ export async function deletePropertyAction(
       where: { id: propertyId, organizationId },
       select: {
         id: true,
-        _count: { select: { units: true } },
         units: {
-          select: { _count: { select: { leases: { where: { status: "ACTIVE" } } } } },
+          select: { _count: { select: { leases: true } } },
         },
       },
     });
     if (!property) return actionError("That property no longer exists.");
 
-    const activeLeases = property.units.reduce((sum, u) => sum + u._count.leases, 0);
-    if (activeLeases > 0) {
+    // Any lease, not just active ones. Deleting a property cascades through
+    // its units to every lease they ever had and every charge on those
+    // leases, and sets the payments' leaseId to null - a building's whole
+    // billing history gone in one click, with the money left as orphaned
+    // rows. This used to refuse only while a lease was ACTIVE, so ending the
+    // leases first made the same destruction one step longer. Same rule as
+    // deleteUnitAction, for the same reason.
+    const leases = property.units.reduce((sum, u) => sum + u._count.leases, 0);
+    if (leases > 0) {
       return actionError(
-        `This property has ${activeLeases} active lease${activeLeases === 1 ? "" : "s"}. End those leases before deleting it.`,
+        `This property has lease history (${leases} lease${leases === 1 ? "" : "s"}), which includes payment records. Properties with leases can't be deleted.`,
       );
     }
 
