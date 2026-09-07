@@ -129,6 +129,18 @@
       "name": "SCREENING_CONSENT_RATE_LIMIT",
       "namespace_id": "1005",
       "simple": { "limit": 5, "period": 60 }
+    },
+    {
+      // /api/report-error takes client-side crash reports with no login and
+      // each one can send an alert email through the same binding that sends
+      // rent notices and password resets. Unlimited, it was a way to burn that
+      // shared quota (3,000/month on Paid) from a loop. Ten a minute per
+      // address is more than any real browser produces and enough to make
+      // exhausting the quota impractical. Keyed by IP only (see
+      // src/lib/rate-limit.ts).
+      "name": "REPORT_ERROR_RATE_LIMIT",
+      "namespace_id": "1006",
+      "simple": { "limit": 10, "period": 60 }
     }
   ],
   /**

@@ -72,7 +72,27 @@ export function parseCsvWithHeader(text: string): CsvTable {
   return { headers: headers.map((h) => h.trim()), rows };
 }
 
-function escapeCsvField(value: string): string {
+/**
+ * A leading `=`, `+`, `@`, tab or CR makes a spreadsheet treat the cell as a
+ * formula, and `-` does too unless the cell is simply a negative number. Every
+ * export here carries text that someone outside the org typed — an
+ * applicant's name from the public form, a merchant name from the bank feed,
+ * a memo from an imported statement — so a cell like `=HYPERLINK(...)` or
+ * `-cmd|' /C calc'!A0` would run on the landlord's machine the moment they
+ * opened the file. Prefixing an apostrophe is the standard defence: Excel
+ * and Sheets show the text as typed and never evaluate it.
+ *
+ * Genuine negative amounts (`-1234.56`, the expense lines in a P&L) are left
+ * alone, or the apostrophe would turn every one of them into text.
+ */
+function neutraliseFormula(value: string): string {
+  if (/^[=+@\t\r]/.test(value)) return `'${value}`;
+  if (value.startsWith("-") && !/^-\d+(\.\d+)?$/.test(value)) return `'${value}`;
+  return value;
+}
+
+function escapeCsvField(raw: string): string {
+  const value = neutraliseFormula(raw);
   if (/[",\n]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }

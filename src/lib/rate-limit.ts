@@ -21,7 +21,8 @@ type LimiterName =
   | "SIGNUP_RATE_LIMIT"
   | "PASSWORD_RESET_RATE_LIMIT"
   | "APPLICATION_RATE_LIMIT"
-  | "SCREENING_CONSENT_RATE_LIMIT";
+  | "SCREENING_CONSENT_RATE_LIMIT"
+  | "REPORT_ERROR_RATE_LIMIT";
 
 /**
  * The limiter binding, or null when there isn't one — local `next dev` has no
@@ -129,4 +130,15 @@ export async function applicationAttemptAllowed(): Promise<boolean> {
 export async function screeningConsentAttemptAllowed(): Promise<boolean> {
   const ip = await clientIp();
   return allowed("SCREENING_CONSENT_RATE_LIMIT", [ip ? `screening-consent:ip:${ip}` : null]);
+}
+
+/**
+ * Client-side crash reports to /api/report-error. Unauthenticated by
+ * necessity (an error boundary can fire for a signed-out visitor) and each
+ * report can cost an alert email, so this is the one public endpoint whose
+ * abuse spends a shared resource rather than just CPU. Keyed by IP only.
+ */
+export async function clientErrorReportAllowed(): Promise<boolean> {
+  const ip = await clientIp();
+  return allowed("REPORT_ERROR_RATE_LIMIT", [ip ? `report-error:ip:${ip}` : null]);
 }

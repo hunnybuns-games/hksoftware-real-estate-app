@@ -8,6 +8,8 @@ interface __BaseEnv_CloudflareEnv {
 	SIGNUP_RATE_LIMIT: RateLimit;
 	PASSWORD_RESET_RATE_LIMIT: RateLimit;
 	APPLICATION_RATE_LIMIT: RateLimit;
+	SCREENING_CONSENT_RATE_LIMIT: RateLimit;
+	REPORT_ERROR_RATE_LIMIT: RateLimit;
 	ASSETS: Fetcher;
 	DOCUMENTS: R2Bucket;
 	USE_D1: "true";

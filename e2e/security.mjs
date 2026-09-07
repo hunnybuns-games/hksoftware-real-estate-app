@@ -371,26 +371,43 @@ log(
   `status=${healthResp.status} body=${JSON.stringify(healthBody)}`,
 );
 
+// Browsers set Sec-Fetch-Site on every fetch and scripts can't override it;
+// the route requires "same-origin", which is what the app's own error
+// boundaries send. Node's fetch sets nothing, so the checks below set it
+// by hand to stand in for the browser.
+const sameOrigin = { "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin" };
+
 const reportOkResp = await fetch(`${BASE}/api/report-error`, {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
+  headers: sameOrigin,
   body: JSON.stringify({ message: "e2e synthetic client error", url: "/e2e-test" }),
 });
 log(
-  "/api/report-error accepts a well-formed client error report",
+  "/api/report-error accepts a well-formed client error report from the app itself",
   reportOkResp.status === 202,
   `status=${reportOkResp.status}`,
 );
 
 const reportBadResp = await fetch(`${BASE}/api/report-error`, {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
+  headers: sameOrigin,
   body: JSON.stringify({ message: "" }), // empty message fails the schema's min(1)
 });
 log(
   "/api/report-error rejects a malformed body rather than silently accepting it",
   reportBadResp.status === 400,
   `status=${reportBadResp.status}`,
+);
+
+const reportForeignResp = await fetch(`${BASE}/api/report-error`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" }, // no Sec-Fetch-Site: curl, a script, another site
+  body: JSON.stringify({ message: "e2e synthetic client error", url: "/e2e-test" }),
+});
+log(
+  "/api/report-error refuses a report that didn't come from the app itself (no Sec-Fetch-Site)",
+  reportForeignResp.status === 403,
+  `status=${reportForeignResp.status}`,
 );
 
 await browser.close();

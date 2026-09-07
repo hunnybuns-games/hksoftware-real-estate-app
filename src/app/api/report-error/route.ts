@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { reportServerError } from "@/lib/error-reporting";
+import { clientErrorReportAllowed } from "@/lib/rate-limit";
 
 /**
  * Where client-side render errors go to actually be seen. `error.tsx` and
@@ -8,16 +9,22 @@ import { reportServerError } from "@/lib/error-reporting";
  * the same failure into Workers Logs and the same email alert server errors
  * already get (see reportServerError in src/lib/error-reporting.ts).
  *
- * Deliberately unauthenticated: an error boundary can fire for a signed-out
- * visitor on a public page, and there's no session to require. The blast
- * radius of that openness is bounded by what reportServerError itself does —
- * one console.error line, plus (only if ERROR_ALERT_EMAIL is configured) one
- * best-effort email with no dedupe. A determined caller could run up that
- * email count; there's no rate limiter on this route yet for the same reason
- * there wasn't one on this app's very first unauthenticated endpoints — worth
- * adding if it's ever actually abused (see docs/observability.md), not worth
- * a new Cloudflare rate-limit binding to guard a client error reporter before
- * there's any evidence it needs one.
+ * Unauthenticated by necessity: an error boundary can fire for a signed-out
+ * visitor on a public page, and there's no session to require. What bounds
+ * the blast radius of that, in order:
+ *
+ *  1. `Sec-Fetch-Site` must say `same-origin`. Browsers set this header and
+ *     scripts can't forge it, so a POST from another site, or from curl in a
+ *     loop, is refused before anything is spent. The app's own error
+ *     boundaries — the only legitimate caller — fetch same-origin.
+ *  2. A per-IP rate limit (REPORT_ERROR_RATE_LIMIT in wrangler.jsonc). Each
+ *     accepted report can cost an alert email, and that email goes through
+ *     the same binding as rent notices and password resets, with a shared
+ *     monthly quota; left unlimited, this route was a way to exhaust it.
+ *  3. A short-lived, per-isolate dedupe on the message, so one browser stuck
+ *     in a render loop sends one alert, not one per re-render. Isolate-local
+ *     only — a best-effort volume cut, not a guarantee, and not what the
+ *     rate limit is for.
  */
 
 export const runtime = "nodejs";
@@ -30,7 +37,32 @@ const bodySchema = z.object({
   url: z.string().trim().max(500).optional(),
 });
 
+const DEDUPE_WINDOW_MS = 60 * 60 * 1000;
+const DEDUPE_MAX_KEYS = 500;
+const recentlyReported = new Map<string, number>();
+
+/** True if this (url, message) pair was already reported in the last hour. */
+function seenRecently(key: string, now: number): boolean {
+  const last = recentlyReported.get(key);
+  if (last !== undefined && now - last < DEDUPE_WINDOW_MS) return true;
+  if (recentlyReported.size >= DEDUPE_MAX_KEYS) {
+    // Drop the oldest entry rather than grow without bound.
+    const oldest = recentlyReported.keys().next().value;
+    if (oldest !== undefined) recentlyReported.delete(oldest);
+  }
+  recentlyReported.set(key, now);
+  return false;
+}
+
 export async function POST(req: Request): Promise<Response> {
+  if (req.headers.get("sec-fetch-site") !== "same-origin") {
+    return Response.json({ ok: false }, { status: 403 });
+  }
+
+  if (!(await clientErrorReportAllowed())) {
+    return Response.json({ ok: false }, { status: 429 });
+  }
+
   let json: unknown;
   try {
     json = await req.json();
@@ -44,6 +76,13 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const { message, digest, stack, url } = parsed.data;
+
+  // Accepted either way — the browser is fire-and-forget — but a repeat
+  // within the window doesn't reach the log or the inbox again.
+  if (seenRecently(`${url ?? ""}\n${message}`, Date.now())) {
+    return new Response(null, { status: 202 });
+  }
+
   const err = new Error(message);
   if (stack) err.stack = stack;
 
