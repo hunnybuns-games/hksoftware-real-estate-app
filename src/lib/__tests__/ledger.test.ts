@@ -5,6 +5,7 @@ import {
   computeBalance,
   nextScheduledCharge,
   pendingRentCharges,
+  shouldSendLateNotice,
 } from "@/lib/ledger";
 import { utcDate } from "@/lib/dates";
 import { parseDollarsToCents, formatCents } from "@/lib/money";
@@ -409,5 +410,43 @@ describe("parseDollarsToCents", () => {
     const cents = parseDollarsToCents("1234.56");
     expect(cents).toBe(123_456);
     expect(formatCents(cents!)).toBe("$1,234.56");
+  });
+});
+
+describe("shouldSendLateNotice", () => {
+  const send = (daysPastDue: number, graceDays = 5) => shouldSendLateNotice({ daysPastDue, graceDays });
+
+  it("fires on the first day the balance is late — the day after grace ends", () => {
+    // Grace 5: days 1–5 past due are still inside grace; day 6 is the first late day.
+    expect(send(5)).toBe(false);
+    expect(send(6)).toBe(true);
+  });
+
+  it("never fires on the last day of grace (the old === 0 branch that couldn't occur)", () => {
+    // daysPastDue === graceDays is not late per computeBalance, so the run
+    // that tested for "zero days since grace ended" never sent anything that
+    // day — and its next chance was a full week later.
+    for (const grace of [0, 3, 5, 10]) expect(send(grace, grace)).toBe(false);
+  });
+
+  it("then fires every seventh day, not on the days between", () => {
+    expect(send(7)).toBe(false);
+    expect(send(12)).toBe(false);
+    expect(send(13)).toBe(true); // 6 + 7
+    expect(send(14)).toBe(false);
+    expect(send(20)).toBe(true); // 6 + 14
+    expect(send(27)).toBe(true); // 6 + 21
+  });
+
+  it("works with no grace period at all", () => {
+    expect(send(0, 0)).toBe(false);
+    expect(send(1, 0)).toBe(true);
+    expect(send(8, 0)).toBe(true);
+    expect(send(9, 0)).toBe(false);
+  });
+
+  it("stays quiet before the due date", () => {
+    expect(send(-3)).toBe(false);
+    expect(send(0)).toBe(false);
   });
 });

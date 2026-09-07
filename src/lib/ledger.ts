@@ -98,6 +98,26 @@ export function computeBalance({
 }
 
 /**
+ * Whether tonight's rent run should send a late notice for a lease this many
+ * days past due, given the organization's grace period.
+ *
+ * Cadence: the first day the balance counts as late, then every seventh day
+ * after — enough to be useful, not enough to be harassment.
+ *
+ * "Late" means `daysPastDue > graceDays` (see computeBalance), so the first
+ * late day is graceDays + 1, not graceDays. The run used to test for zero days
+ * since grace ended — a value that can't occur once isLate is true — and the
+ * first notice went out a week after grace lapsed instead of the day it did,
+ * while the landing page promised the opposite. Pure, so the cadence is
+ * pinned by a unit test rather than discovered by a tenant.
+ */
+export function shouldSendLateNotice(args: { daysPastDue: number; graceDays: number }): boolean {
+  const daysLate = args.daysPastDue - args.graceDays; // 1 on the first late day
+  if (daysLate < 1) return false;
+  return (daysLate - 1) % 7 === 0;
+}
+
+/**
  * What a lease owes next — for display, not billing. Unlike `pendingRentCharges`,
  * this looks *past* the current month, so a lease that hasn't started yet (or is
  * fully paid through the current period) still shows its next rent date instead

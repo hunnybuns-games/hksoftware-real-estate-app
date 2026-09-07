@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { isCronAuthorized } from "@/lib/cron-auth";
-import { computeBalance, generateRentCharges } from "@/lib/ledger";
+import { computeBalance, generateRentCharges, shouldSendLateNotice } from "@/lib/ledger";
+import { applyReconciliationForOrganization } from "@/lib/reconciliation";
 import { notifyRentDue, notifyRentLate } from "@/lib/notifications";
 import { daysBetweenUtc, startOfUtcDay } from "@/lib/dates";
 import { reportServerError } from "@/lib/error-reporting";
@@ -70,6 +71,14 @@ async function runForOrganization(
 ): Promise<void> {
   const { created } = await generateRentCharges({ organizationId: org.id, asOf: today });
 
+  // Reconciliation is otherwise only recomputed when something is written —
+  // a payment recorded, a charge posted. But SHORT is a function of *today*
+  // (a partial payment turns short once grace lapses, with no write to
+  // trigger it), so the nightly run is the one place that keeps those
+  // statuses honest. Unconditional, unlike the manual "Run rent" button's
+  // charges-only trigger, and cheap: one pass over the org's leases.
+  await applyReconciliationForOrganization(org.id);
+
   let remindersSent = 0;
   let lateNoticesSent = 0;
 
@@ -111,11 +120,11 @@ async function runForOrganization(
       continue;
     }
 
-    // Chase on the day the grace period lapses, then weekly — enough to be
-    // useful, not enough to be harassment.
+    // Chase on the first day the balance is late, then weekly. The cadence
+    // lives in shouldSendLateNotice so it's unit-tested — an off-by-one here
+    // once meant the first notice went out a week after grace lapsed.
     if (balance.isLate) {
-      const daysSinceGraceEnded = balance.daysPastDue - org.graceDays;
-      if (daysSinceGraceEnded === 0 || daysSinceGraceEnded % 7 === 0) {
+      if (shouldSendLateNotice({ daysPastDue: balance.daysPastDue, graceDays: org.graceDays })) {
         await notifyRentLate({
           to: { email: lease.tenant.email, name: lease.tenant.firstName },
           organizationId: org.id,

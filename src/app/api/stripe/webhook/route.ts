@@ -137,6 +137,13 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session): Promise<vo
     return;
   }
 
+  // Stripe redelivers, and not always in order. If payment_intent.succeeded
+  // already settled this row (or a refund has since reversed it), a late or
+  // repeated checkout.session.completed must not drag it back to PROCESSING
+  // and re-send the receipt. onIntentSucceeded has the same guard; status
+  // only ever moves forward here.
+  if (payment.status === "SUCCEEDED" || payment.status === "REFUNDED") return;
+
   // `paid` means the money is settled (cards). ACH lands here as `unpaid` /
   // `processing` and settles later via payment_intent.succeeded.
   const settled = session.payment_status === "paid";

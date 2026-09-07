@@ -285,6 +285,49 @@ describe("checkout.session.completed", () => {
       expect.objectContaining({ data: expect.objectContaining({ stripePaymentIntentId: "pi_expanded" }) }),
     );
   });
+
+  it("never drags an already-settled payment back to PROCESSING on redelivery", async () => {
+    // payment_intent.succeeded landed first; a late checkout.session.completed
+    // for an ACH session (payment_status=unpaid) then arrives. Before the
+    // guard this rewrote status to PROCESSING, cleared paidAt, and sent a
+    // second receipt.
+    paymentFindUnique.mockResolvedValueOnce(paymentRow({ status: "SUCCEEDED", stripePaymentIntentId: "pi_9" }));
+
+    const res = await POST(
+      await signedRequest(
+        eventPayload("checkout.session.completed", {
+          id: "cs_late",
+          payment_intent: "pi_9",
+          payment_status: "unpaid",
+          amount_total: 180_000,
+          metadata: { paymentId: "pay_1" },
+        }),
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(paymentUpdate).not.toHaveBeenCalled();
+    expect(notifyRentReceived).not.toHaveBeenCalled();
+    expect(applyReconciliation).not.toHaveBeenCalled();
+  });
+
+  it("leaves a REFUNDED payment alone on redelivery too", async () => {
+    paymentFindUnique.mockResolvedValueOnce(paymentRow({ status: "REFUNDED", stripePaymentIntentId: "pi_9" }));
+
+    await POST(
+      await signedRequest(
+        eventPayload("checkout.session.completed", {
+          id: "cs_late2",
+          payment_intent: "pi_9",
+          payment_status: "paid",
+          metadata: { paymentId: "pay_1" },
+        }),
+      ),
+    );
+
+    expect(paymentUpdate).not.toHaveBeenCalled();
+    expect(notifyRentReceived).not.toHaveBeenCalled();
+  });
 });
 
 describe("checkout.session.expired", () => {
