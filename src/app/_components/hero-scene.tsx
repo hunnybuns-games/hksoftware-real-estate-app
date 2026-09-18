@@ -71,8 +71,9 @@ export function HeroScene({ className }: { className?: string }) {
         </text>
       </g>
 
+      {/* chips, level with each other, under the sill */}
       {/* chip: rent received */}
-      <g transform="translate(16 296)">
+      <g transform="translate(20 312)">
         <rect width="212" height="64" rx="14" fill="var(--surface)" stroke="var(--neutral-200)" />
         <circle cx="32" cy="32" r="14" fill={CAT.cushion} />
         <path
@@ -92,7 +93,7 @@ export function HeroScene({ className }: { className?: string }) {
       </g>
 
       {/* chip: lease signed */}
-      <g transform="translate(268 316)">
+      <g transform="translate(264 312)">
         <rect width="196" height="64" rx="14" fill="var(--surface)" stroke="var(--neutral-200)" />
         <rect x="18" y="18" width="28" height="28" rx="8" fill="var(--scene-frame)" />
         <path

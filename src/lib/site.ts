@@ -23,14 +23,15 @@
 export const SITE = {
   name: "ComfyLease",
   /** Used where the name alone is ambiguous — page titles, card headings. */
-  tagline: "Property management software for independent landlords",
+  tagline: "Property management made easy",
   /**
    * The one description search results and social cards quote. Written to be
-   * read by a person: it leads with who it's for and what it replaces, because
-   * "property management software" alone is a category with a hundred entrants.
+   * read by a person, and to say the one thing this product is competing on:
+   * not features, simplicity. "Property management software" alone is a
+   * category with a hundred entrants.
    */
   description:
-    "Property management software for independent landlords with 20–200 units. Track properties, units and leases, collect rent by bank transfer, reconcile payments automatically, and handle maintenance requests — without enterprise pricing.",
+    "The simplest way to manage your rentals. Track leases, collect rent by bank transfer, and handle repairs — built for landlords with up to a hundred properties.",
   locale: "en_US",
   /** Matches --color-brand-600 in globals.css, for the browser UI and manifest. */
   themeColor: "#1f6f8b",
