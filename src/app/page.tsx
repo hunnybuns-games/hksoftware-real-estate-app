@@ -87,7 +87,14 @@ export default async function HomePage() {
     <div className={clsx("flex min-h-dvh flex-col", nunito.className)}>
       <StructuredData nonce={nonce} faqs={FAQS.map((f) => ({ q: f.q, a: f.a }))} />
 
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
+      {/*
+       * Sticks to the top as the page scrolls. The bar is the page colour at
+       * 85% with a blur behind it, so content sliding under it stays legible
+       * as a hint of what's there rather than bleeding through, in either
+       * theme. The inner container keeps the same width as the page below.
+       */}
+      <header className="sticky top-0 z-20 bg-slate-50/85 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
         <Logo />
         <nav className="flex items-center gap-1 sm:gap-2" aria-label="Main">
           <a href="#how" className="btn-ghost hidden sm:inline-flex">
@@ -108,6 +115,7 @@ export default async function HomePage() {
             Start free
           </Link>
         </nav>
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-6">
@@ -141,7 +149,7 @@ export default async function HomePage() {
                   See how it works
                 </a>
               </div>
-              <p className="mt-4 text-sm text-slate-500">Free to start. No credit card.</p>
+              <p className="mt-4 text-sm text-slate-500">Free to start. No credit card required.</p>
             </div>
             <HeroScene className="mx-auto w-full max-w-[420px] lg:max-w-none" />
           </div>

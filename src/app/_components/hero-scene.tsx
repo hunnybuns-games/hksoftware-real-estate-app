@@ -2,13 +2,13 @@ import { CatShapes, CAT } from "@/components/cat-mark";
 
 /**
  * The cover-page illustration: the cat from the brand mark asleep on its
- * cushion on a windowsill, with two small product moments floating beside
- * it — a rent payment landing and a lease getting signed. The point of the
- * picture is the mood (nothing needs you right now); the chips are there so
- * the mood is about *this* product and not a pet shop.
+ * cushion on a windowsill, a plant beside it. The point of the picture is
+ * the mood — nothing needs you right now — and the headline carries the
+ * product; an earlier version floated "rent received" / "lease signed"
+ * chips under the sill and they were cut as clutter.
  *
  * Drawn inline so it follows the theme. Anything that is "the room" — the
- * window frame, the sky, the chips — takes its colour from the same tokens
+ * window frame, the sky, the sill — takes its colour from the same tokens
  * the page uses, so at night the window shows a night sky and the chips sit
  * on the dark surface colour. The cat and cushion are illustration colours
  * and stay the same (see CAT in cat-mark.tsx).
@@ -20,10 +20,10 @@ import { CatShapes, CAT } from "@/components/cat-mark";
 export function HeroScene({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 480 400"
+      viewBox="0 0 480 300"
       className={className}
       role="img"
-      aria-label="A cat asleep on a cushion on a windowsill. Beside it, a card says a rent payment was received and another says a lease was signed."
+      aria-label="A cat asleep on a cushion on a windowsill, next to a small plant."
     >
       {/* window: frame, then sky, then the cross-bars over the sky */}
       <rect x="96" y="16" width="288" height="244" rx="22" fill="var(--scene-frame)" />
@@ -68,52 +68,6 @@ export function HeroScene({ className }: { className?: string }) {
         </text>
         <text x="184" y="84" fontSize="30">
           z
-        </text>
-      </g>
-
-      {/* chips, level with each other, under the sill */}
-      {/* chip: rent received */}
-      <g transform="translate(20 312)">
-        <rect width="212" height="64" rx="14" fill="var(--surface)" stroke="var(--neutral-200)" />
-        <circle cx="32" cy="32" r="14" fill={CAT.cushion} />
-        <path
-          d="M25.5 32.5l4.5 4.5 9-9"
-          fill="none"
-          stroke="#fff"
-          strokeWidth="2.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <text x="58" y="28" fontFamily="inherit" fontSize="14" fontWeight="700" fill="var(--neutral-900)">
-          Rent received
-        </text>
-        <text x="58" y="47" fontFamily="inherit" fontSize="12.5" fill="var(--neutral-500)">
-          Unit 2B · $1,450 · matched
-        </text>
-      </g>
-
-      {/* chip: lease signed */}
-      <g transform="translate(264 312)">
-        <rect width="196" height="64" rx="14" fill="var(--surface)" stroke="var(--neutral-200)" />
-        <rect x="18" y="18" width="28" height="28" rx="8" fill="var(--scene-frame)" />
-        <path
-          d="M24 28h16M24 34h10"
-          stroke="var(--neutral-400)"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-        <path
-          d="M27 40c3-4 5 2 8-2s4 0 7-3"
-          fill="none"
-          stroke={CAT.fur}
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-        <text x="58" y="28" fontFamily="inherit" fontSize="14" fontWeight="700" fill="var(--neutral-900)">
-          Lease signed
-        </text>
-        <text x="58" y="47" fontFamily="inherit" fontSize="12.5" fill="var(--neutral-500)">
-          12 Oak St · both parties
         </text>
       </g>
     </svg>
