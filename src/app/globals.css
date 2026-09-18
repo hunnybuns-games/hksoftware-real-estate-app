@@ -65,9 +65,34 @@
    * and "white" was never the intent, "the layer above the page" was.
    */
   --surface: #fff;
+
+  /*
+   * The cover page's warm ground and the colours of the room in its
+   * illustration (src/app/_components/hero-scene.tsx). Warm on purpose where
+   * everything else is cool: the marketing page is the one place the app is
+   * allowed to feel like a living room instead of a ledger. By day the window
+   * shows a pale sky and a sun; the .dark block below turns it into night.
+   */
+  --cozy: oklch(97.5% 0.014 80); /* hero band: cream, a hair warmer than the page */
+  --cozy-edge: oklch(92% 0.03 80); /* its border and the rule under it */
+  --scene-frame: oklch(99% 0.006 80);
+  --scene-sky: oklch(90% 0.04 215);
+  --scene-sun: oklch(88% 0.12 85);
+  --scene-hill: oklch(84% 0.05 150);
+  --scene-sill: oklch(80% 0.07 70);
+  --scene-sill-shadow: oklch(70% 0.08 65);
 }
 
 .dark {
+  --cozy: oklch(23% 0.016 60);
+  --cozy-edge: oklch(30% 0.02 60);
+  --scene-frame: oklch(32% 0.02 60);
+  --scene-sky: oklch(26% 0.05 262);
+  --scene-sun: oklch(92% 0.04 90); /* the moon */
+  --scene-hill: oklch(34% 0.04 160);
+  --scene-sill: oklch(45% 0.06 65);
+  --scene-sill-shadow: oklch(36% 0.05 60);
+
   --neutral-50: oklch(19% 0.015 258); /* page background, recessed rows */
   --neutral-100: oklch(26% 0.017 258); /* dividers, chips */
   --neutral-200: oklch(31% 0.018 258); /* borders */
@@ -102,6 +127,8 @@
   --color-slate-950: var(--neutral-950);
 
   --color-surface: var(--surface);
+  --color-cozy: var(--cozy);
+  --color-cozy-edge: var(--cozy-edge);
 }
 
 @theme {

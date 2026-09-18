@@ -2,11 +2,15 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
+import clsx from "clsx";
 import { homeFor, liveSessionUser } from "@/lib/rbac";
 import { SITE } from "@/lib/site";
 import { Logo } from "@/components/logo";
+import { CatMark } from "@/components/cat-mark";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StructuredData } from "./_components/structured-data";
+import { HeroScene } from "./_components/hero-scene";
+import { nunito } from "./_components/landing-font";
 
 export const metadata: Metadata = {
   // No `title` override: the root layout's default is already the fully-formed
@@ -99,6 +103,13 @@ const FAQS = [
   },
 ] as const;
 
+/*
+ * Section headings share one treatment: Nunito at 800, tight tracking, sized
+ * for reading rather than shouting. Defined once so the four sections below
+ * can't drift apart.
+ */
+const h2Class = "text-[26px] font-extrabold tracking-tight text-slate-900 sm:text-3xl";
+
 export default async function HomePage() {
   // Database-backed, not auth() — a token naming a deleted account has to land
   // on this marketing page rather than be routed into the app, or it ping-pongs
@@ -112,72 +123,98 @@ export default async function HomePage() {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className={clsx("flex min-h-dvh flex-col", nunito.className)}>
       <StructuredData nonce={nonce} faqs={FAQS.map((f) => ({ q: f.q, a: f.a }))} />
 
-      <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-5">
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
         <Logo />
-        <nav className="flex items-center gap-2" aria-label="Main">
-          <ThemeToggle className="mr-1 hidden sm:inline-flex" />
-          <Link href="/login" className="btn-ghost">
+        <nav className="flex items-center gap-1 sm:gap-2" aria-label="Main">
+          <a href="#features" className="btn-ghost hidden sm:inline-flex">
+            What it does
+          </a>
+          <a href="#faq" className="btn-ghost hidden sm:inline-flex">
+            Questions
+          </a>
+          {/* Wrapped rather than given `hidden` directly: the toggle sets its own
+              display, and two display utilities on one element is a coin toss. */}
+          <span className="mx-1 hidden sm:inline-flex">
+            <ThemeToggle />
+          </span>
+          <Link href="/login" className="btn-ghost whitespace-nowrap">
             Sign in
           </Link>
-          <Link href="/signup" className="btn-primary">
+          <Link href="/signup" className="btn-primary rounded-full px-4 whitespace-nowrap">
             Start free
           </Link>
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6">
-        <section className="pt-16 pb-14 sm:pt-24">
-          <p className="text-sm font-semibold text-brand-700 dark:text-brand-300">
-            For 20–200 unit portfolios
-          </p>
-          {/*
-           * One h1 on the page, and it leads with the category a searcher types
-           * ("property management") rather than the brand — nobody is searching
-           * for a product they haven't heard of by name yet.
-           */}
-          <h1 className="mt-3 max-w-2xl text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-            Property management software without the enterprise tax.
-          </h1>
-          <p className="mt-5 max-w-2xl text-lg text-slate-600">
-            Track units and leases, collect rent by bank transfer, reconcile the payments that
-            arrive, and handle maintenance requests — in software that stays out of your way. Built
-            for the portfolio that outgrew a spreadsheet but doesn&apos;t need AppFolio.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link href="/signup" className="btn-primary px-5 py-2.5">
-              Create your account
-            </Link>
-            <Link href="/login" className="btn-secondary px-5 py-2.5">
-              Sign in
-            </Link>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-6">
+        {/*
+         * The hero is one warm, rounded panel — a cushion, if you like — on the
+         * cool page. Copy on the left, the window scene on the right; on a
+         * phone the scene sits under the copy at a size that still reads.
+         */}
+        <section className="mt-2 rounded-[28px] border border-cozy-edge bg-cozy px-6 py-12 sm:px-10 sm:py-14 lg:px-14 lg:py-16">
+          <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_1fr] lg:gap-8">
+            <div>
+              <p className="text-sm font-bold tracking-wide text-brand-700 uppercase dark:text-brand-300">
+                For 20–200 unit portfolios
+              </p>
+              {/*
+               * One h1 on the page, and it leads with the category a searcher
+               * types ("property management") rather than the brand — nobody is
+               * searching for a product they haven't heard of by name yet.
+               */}
+              <h1 className="mt-4 max-w-xl text-4xl leading-[1.08] font-extrabold tracking-tight text-slate-900 text-balance sm:text-5xl lg:text-[50px]">
+                Property management software you can relax with.
+              </h1>
+              <p className="mt-5 max-w-lg text-lg leading-relaxed text-slate-600">
+                Units and leases in one place, rent collected by bank transfer, payments matched
+                to what was owed, and repairs with a paper trail. Built for the landlord who
+                outgrew a spreadsheet and doesn&apos;t want an enterprise tool.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link href="/signup" className="btn-primary rounded-full px-6 py-3 text-[15px]">
+                  Start free
+                </Link>
+                <a
+                  href="#features"
+                  className="btn rounded-full border border-slate-300 bg-surface px-6 py-3 text-[15px] text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-100"
+                >
+                  See what it does
+                </a>
+              </div>
+              <p className="mt-4 text-sm text-slate-500">
+                No setup call. No credit card. A property and a lease on the books in ten minutes.
+              </p>
+            </div>
+            <HeroScene className="mx-auto w-full max-w-[420px] lg:max-w-none" />
           </div>
-          <p className="mt-4 text-sm text-slate-500">
-            No setup call. Add a property and a lease in the first few minutes.
-          </p>
         </section>
 
-        <section aria-labelledby="features" className="border-t border-slate-200 py-14">
-          <h2 id="features" className="text-2xl font-semibold tracking-tight text-slate-900">
-            What it does
-          </h2>
-          <div className="mt-8 grid gap-x-10 gap-y-8 sm:grid-cols-2">
+        <section aria-labelledby="features" className="scroll-mt-24 py-20" id="features">
+          <div className="max-w-2xl">
+            <h2 className={h2Class}>Everything a small landlord needs. Nothing you don&apos;t.</h2>
+            <p className="mt-3 text-base leading-relaxed text-slate-600">
+              Eight things it does, each written from what&apos;s actually in the app.
+            </p>
+          </div>
+          <div className="mt-10 grid gap-x-12 gap-y-9 sm:grid-cols-2">
             {FEATURES.map((f) => (
-              <article key={f.heading}>
-                <h3 className="text-sm font-semibold text-slate-900">{f.heading}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">{f.body}</p>
+              <article key={f.heading} className="border-t border-slate-200 pt-5">
+                <h3 className="text-[15px] font-bold text-slate-900">{f.heading}</h3>
+                <p className="mt-2 text-[15px] leading-relaxed text-slate-600">{f.body}</p>
               </article>
             ))}
           </div>
         </section>
 
-        <section aria-labelledby="who" className="border-t border-slate-200 py-14">
-          <h2 id="who" className="text-2xl font-semibold tracking-tight text-slate-900">
+        <section aria-labelledby="who" className="border-t border-slate-200 py-20">
+          <h2 id="who" className={h2Class}>
             Who it&apos;s for
           </h2>
-          <div className="mt-6 max-w-3xl space-y-4 text-sm leading-relaxed text-slate-600">
+          <div className="mt-6 max-w-3xl space-y-4 text-[15px] leading-relaxed text-slate-600 sm:text-base">
             <p>
               If you own or manage a few buildings — a duplex and a triplex, a small apartment
               block, a scattered-site portfolio of single-family rentals — the tools available to
@@ -194,41 +231,47 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section aria-labelledby="faq" className="border-t border-slate-200 py-14">
-          <h2 id="faq" className="text-2xl font-semibold tracking-tight text-slate-900">
-            Questions
-          </h2>
+        <section aria-labelledby="faq" className="scroll-mt-24 border-t border-slate-200 py-20" id="faq">
+          <h2 className={h2Class}>Questions</h2>
           {/*
            * Answers are in the HTML rather than behind a click. A <details>
            * accordion would look tidier, but the answer text is the reason this
            * section exists, and content a crawler has to guess is interactive is
            * content that may not be indexed.
            */}
-          <dl className="mt-8 grid gap-x-10 gap-y-7 sm:grid-cols-2">
+          <dl className="mt-10 grid gap-x-12 gap-y-8 sm:grid-cols-2">
             {FAQS.map((f) => (
               <div key={f.q}>
-                <dt className="text-sm font-semibold text-slate-900">{f.q}</dt>
-                <dd className="mt-2 text-sm leading-relaxed text-slate-600">{f.a}</dd>
+                <dt className="text-[15px] font-bold text-slate-900">{f.q}</dt>
+                <dd className="mt-2 text-[15px] leading-relaxed text-slate-600">{f.a}</dd>
               </div>
             ))}
           </dl>
         </section>
 
-        <section aria-labelledby="cta" className="border-t border-slate-200 py-14">
-          <h2 id="cta" className="text-2xl font-semibold tracking-tight text-slate-900">
-            Start with one property
-          </h2>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-600">
-            Add a property, a unit and a lease, and the dashboard has something real on it. Invite
-            your residents when you&apos;re ready for them.
-          </p>
-          <Link href="/signup" className="btn-primary mt-6 inline-flex px-5 py-2.5">
-            Create your account
-          </Link>
+        {/* The closing panel echoes the hero: same warm ground, the cat small
+            in the corner, one action. */}
+        <section
+          aria-labelledby="cta"
+          className="mb-10 flex flex-col items-start gap-6 rounded-[28px] border border-cozy-edge bg-cozy px-6 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-10"
+        >
+          <div className="max-w-xl">
+            <h2 id="cta" className={h2Class}>
+              Start with one property. Then put your feet up.
+            </h2>
+            <p className="mt-3 text-[15px] leading-relaxed text-slate-600 sm:text-base">
+              Add a property, a unit and a lease, and the dashboard has something real on it.
+              Invite your residents when you&apos;re ready for them.
+            </p>
+            <Link href="/signup" className="btn-primary mt-6 inline-flex rounded-full px-6 py-3 text-[15px]">
+              Create your account
+            </Link>
+          </div>
+          <CatMark className="hidden w-36 shrink-0 sm:block" />
         </section>
       </main>
 
-      <footer className="mx-auto w-full max-w-5xl px-6 py-8 text-xs text-slate-400">
+      <footer className="mx-auto w-full max-w-6xl px-6 py-8 text-xs text-slate-400">
         <p>Rent is moved by Stripe. We never hold your money.</p>
         <p className="mt-2">
           {SITE.name} — {SITE.tagline}.{" "}
