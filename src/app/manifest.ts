@@ -23,11 +23,14 @@ import { SITE } from "@/lib/site";
  *  - icon-maskable-512.png (`purpose: "maskable"`) is a *different* image,
  *    not just a bigger one: Android crops a maskable icon to its own launcher
  *    shape and only guarantees the centred 80%-diameter safe zone survives.
- *    icon.svg's tight framing doesn't fit inside that (its ground line would
- *    get clipped), so this is the same mark redrawn with real padding — see
+ *    icon.svg's framing doesn't fit inside that (the cushion runs nearly
+ *    edge to edge and both ends would get clipped), so this is the same
+ *    artwork rendered smaller on a padded canvas — see
  *    scripts/generate-manifest-icons.mjs for the safe-zone math.
- * Regenerate the three PNGs with `node scripts/generate-manifest-icons.mjs`
- * if the mark or brand colour ever changes; nothing here reads a stale copy.
+ * All three PNGs, and apple-icon.png, are rendered from icon.svg. Regenerate
+ * them with `node scripts/generate-manifest-icons.mjs` and
+ * `node scripts/generate-apple-icon.mjs` whenever the SVG changes; nothing
+ * here reads a stale copy.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {

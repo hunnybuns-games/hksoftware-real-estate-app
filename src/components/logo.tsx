@@ -2,9 +2,12 @@ import clsx from "clsx";
 
 /**
  * The wordmark. The name itself lives in SITE.name (src/lib/site.ts) — this file
- * is the artwork, and the two matching monograms are src/app/icon.svg and
- * src/app/apple-icon.png (regenerate the latter with
- * scripts/generate-apple-icon.mjs).
+ * is the artwork for the header badge: a roofline on a brand-coloured tile.
+ *
+ * The favicon and app icons are a different mark now — the sleeping cat in
+ * src/app/icon.svg, with apple-icon.png and public/icons/* rendered from it
+ * by the scripts/generate-*.mjs generators. This badge hasn't been switched
+ * over; if the cat becomes the brand, this is the one other place it lives.
  */
 export function Logo({ className, compact = false }: { className?: string; compact?: boolean }) {
   return (
