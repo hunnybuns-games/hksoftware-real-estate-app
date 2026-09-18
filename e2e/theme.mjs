@@ -126,6 +126,22 @@ async function auditSurface(page, name, path) {
 
 const browser = await launchBrowser();
 
+/*
+ * The toggle is one switch (aria-label "Dark mode"), not a radio group: it
+ * flips whatever is on screen. So "choose light" means "press it only if the
+ * page is currently dark". The class on <html> is the source of truth for
+ * "currently" — the inline script sets it before paint, whereas the switch's
+ * aria-checked only catches up after hydration — and the click waits for
+ * hydration itself so it can't land dead.
+ */
+async function chooseTheme(page, theme) {
+  await page.waitForLoadState("networkidle").catch(() => {});
+  const isDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+  if ((theme === "dark") !== isDark) {
+    await page.getByRole("switch", { name: "Dark mode" }).first().click();
+  }
+}
+
 // --- OS default, no stored preference -------------------------------------
 // An OS set to dark has to give a dark app on the very first visit, before
 // anyone has touched the toggle. This is the case a class-only implementation
@@ -151,9 +167,9 @@ log(
 );
 
 // --- Explicit choice beats the OS, and survives a reload ------------------
-await pageLight.getByRole("radio", { name: "Dark" }).click();
+await chooseTheme(pageLight, "dark");
 log(
-  "picking Dark on a light OS switches immediately",
+  "pressing the switch on a light OS goes dark immediately",
   await pageLight.evaluate(() => document.documentElement.classList.contains("dark")),
 );
 await pageLight.reload();
@@ -162,28 +178,32 @@ log(
   await pageLight.evaluate(() => document.documentElement.classList.contains("dark")),
 );
 /*
- * Waited for rather than read once. The server renders "System" pressed on
+ * Waited for rather than read once. The server renders the switch off on
  * purpose — it cannot know the stored preference — and the toggle corrects itself
  * during hydration. Reading the attribute the instant reload() resolves is a race
  * with that, and it's a race this test lost intermittently.
  */
 const reflected = await pageLight
-  .locator('[role="radio"][aria-checked="true"]')
-  .filter({ hasText: "Dark" })
+  .locator('[role="switch"][aria-checked="true"]')
+  .first()
   .waitFor({ timeout: 10000 })
   .then(() => true)
   .catch(() => false);
 log("the remembered choice is reflected in the control, not just the colours", reflected);
 
-await pageDark.getByRole("radio", { name: "Light" }).click();
+await chooseTheme(pageDark, "light");
 await pageDark.reload();
 log(
-  "picking Light on a dark OS is remembered too (a boolean couldn't express this)",
+  "choosing light on a dark OS is remembered too (a boolean couldn't express this)",
   await pageDark.evaluate(() => !document.documentElement.classList.contains("dark")),
 );
-await pageDark.getByRole("radio", { name: "System" }).click();
+// There is no System option any more; the OS is only followed until the
+// first press. Pressing again on this dark OS must go back to dark because
+// it was *chosen*, not because the OS said so.
+await chooseTheme(pageDark, "dark");
+await pageDark.reload();
 log(
-  "System hands control back to the OS",
+  "pressing again flips back, and that is remembered as well",
   await pageDark.evaluate(() => document.documentElement.classList.contains("dark")),
 );
 
@@ -261,7 +281,7 @@ const surfaces = [
  * PASS below is meaningless.
  */
 await page.goto(`${BASE}/app`);
-await page.getByRole("radio", { name: "Light" }).first().click();
+await chooseTheme(page, "light");
 await page.waitForLoadState("networkidle");
 const lightModeProblems = await auditDarkSurfaces(page);
 log(
@@ -269,7 +289,7 @@ log(
   lightModeProblems.length > 5,
   `${lightModeProblems.length} problem(s) found in light mode`,
 );
-await page.getByRole("radio", { name: "Dark" }).first().click();
+await chooseTheme(page, "dark");
 
 let auditFailures = 0;
 for (const [name, path] of surfaces) {
@@ -342,7 +362,7 @@ await auditAs("owner", "owner@example.com", [["owner dashboard", "/owner"]]);
 // Keep a reference shot of the densest screen in each theme, for eyeballing.
 await page.goto(`${BASE}/app`);
 await page.screenshot({ path: artifactPath("theme-dashboard-dark.png"), fullPage: true });
-await page.getByRole("radio", { name: "Light" }).first().click();
+await chooseTheme(page, "light");
 await page.screenshot({ path: artifactPath("theme-dashboard-light.png"), fullPage: true });
 
 await browser.close();

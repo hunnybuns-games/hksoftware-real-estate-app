@@ -2,11 +2,14 @@
  * Theme preference: the small amount of logic that both the server-rendered
  * inline script and the client toggle have to agree on.
  *
- * Three states, not two. "system" is a real choice and the default — most
- * people never touch a theme switch and expect an app to match the rest of
- * their machine. Storing only a boolean would lose the difference between "I
- * want light" and "I haven't said", so a user who picked light on a light OS
- * would silently flip to dark the day they change their OS setting.
+ * Three stored states, two visible ones. "system" is the default and means
+ * "nothing chosen yet": most people never touch a theme switch and expect an
+ * app to match the rest of their machine, so a first visit follows the OS.
+ * The control itself (src/components/theme-toggle.tsx) only offers light and
+ * dark; the first press stores one of those and from then on the page keeps
+ * it. Storing only a boolean would lose the difference between "I want light"
+ * and "I haven't said", so a user who picked light on a light OS would
+ * silently flip to dark the day they change their OS setting.
  */
 
 export const THEME_STORAGE_KEY = "rentwell-theme";
@@ -34,12 +37,16 @@ export function readThemeChoice(): ThemeChoice {
   }
 }
 
+/** The concrete theme a choice means right now: "system" asks the OS. */
+export function resolveTheme(choice: ThemeChoice): "light" | "dark" {
+  if (choice === "dark") return "dark";
+  if (choice === "light") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 /** Resolves a choice to a concrete theme and puts it on <html>. */
 export function applyThemeChoice(choice: ThemeChoice): void {
-  const dark =
-    choice === "dark" ||
-    (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.classList.toggle("dark", resolveTheme(choice) === "dark");
 }
 
 /**

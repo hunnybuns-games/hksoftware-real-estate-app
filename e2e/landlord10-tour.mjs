@@ -341,9 +341,12 @@ await section("theme toggle (Zoe)", async () => {
   // equivalent check (e2e/theme.mjs) passes reliably specifically because it
   // uses this default "load" wait.
   await page.goto(`${BASE}/portal`, { waitUntil: "load" });
-  const darkRadio = page.getByRole("radio", { name: "Dark" });
-  if (await darkRadio.count()) {
-    await darkRadio.click();
+  // One switch that flips whatever is on screen, so press it only if the
+  // portal is currently light (a dark-OS run would otherwise flip to light).
+  const darkSwitch = page.getByRole("switch", { name: "Dark mode" }).first();
+  if (await darkSwitch.count()) {
+    const already = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+    if (!already) await darkSwitch.click();
     await page.waitForTimeout(500);
     const isDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
     log("Zoe can switch the app to dark mode from the portal", isDark);
